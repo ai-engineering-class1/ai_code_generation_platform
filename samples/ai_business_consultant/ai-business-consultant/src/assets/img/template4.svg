@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 144 80" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <!-- Generator: Sketch 51.2 (57519) - http://www.bohemiancoding.com/sketch -->
+    <title>template/thumbnail/process-control</title>
+    <desc>Created with Sketch.</desc>
+    <defs>
+        <rect id="path-1" x="0" y="0" width="120" height="80" rx="3"></rect>
+        <rect id="path-3" x="0" y="0" width="104" height="72" rx="3"></rect>
+        <linearGradient x1="82.1401785%" y1="-16.2124912%" x2="50%" y2="100%" id="linearGradient-5">
+            <stop stop-color="#F1F2F4" offset="0%"></stop>
+            <stop stop-color="#C1C7D0" offset="100%"></stop>
+        </linearGradient>
+    </defs>
+    <g id="template/thumbnail/process-control" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="template-thumbnail_process-control" transform="translate(12.000000, 0.000000)">
+            <mask id="mask-2" fill="white">
+                <use xlink:href="#path-1"></use>
+            </mask>
+            <use id="BG" fill="#CFD3DB" xlink:href="#path-1"></use>
+            <g id="BG" mask="url(#mask-2)">
+                <g transform="translate(16.000000, 8.000000)">
+                    <mask id="mask-4" fill="white">
+                        <use xlink:href="#path-3"></use>
+                    </mask>
+                    <use id="content" stroke="none" fill="#CFD3DB" fill-rule="evenodd" xlink:href="#path-3"></use>
+                    <path d="M126,14.378024 C112.103225,3.39205981 61.5,7.37802396 32,20.378024 C2.5,33.378024 -34,17.878024 -34,17.878024 L-23.5,80.378024 L106,78.878024 C106,78.878024 139.896775,25.3639881 126,14.378024 Z" id="Path-6" stroke="none" fill="url(#linearGradient-5)" fill-rule="evenodd" mask="url(#mask-4)"></path>
+                    <g id="content" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd" mask="url(#mask-4)">
+                        <g transform="translate(9.000000, 18.000000)">
+                            <path d="M19.5023364,20 C19.5023364,20 18.1583171,20 16.5057303,20 L8.99660607,20 C7.34162624,20 6,18.6609799 6,16.9983345 L6,12" id="Line-Copy-3" stroke="#97A0AF" stroke-width="1" fill="none" stroke-linecap="square"></path>
+                            <path d="M68.5057303,32 C68.5057303,32 68.0564834,32 67.5128713,32 L55.996253,32" id="Line-Copy-7" stroke="#97A0AF" stroke-width="1" fill="none" stroke-linecap="square" transform="translate(63.252865, 32.000000) scale(-1, 1) translate(-63.252865, -32.000000) "></path>
+                            <rect id="Rectangle-27-Copy" stroke="none" fill="#FFC400" fill-rule="evenodd" x="42" y="27" width="16" height="10" rx="2"></rect>
+                            <circle id="Oval-10" stroke="none" fill="#344563" fill-rule="evenodd" cx="6" cy="6" r="6"></circle>
+                            <path d="M78.5023364,8 C78.5023364,8 77.1571208,8 75.4991637,8 L61.0031727,8 C59.3445662,8 58,9.34177063 58,10.9910904 L58,32" id="Line-Copy-8" stroke="#97A0AF" stroke-width="1" fill="none" stroke-linecap="square" transform="translate(68.251168, 20.000000) scale(-1, 1) translate(-68.251168, -20.000000) "></path>
+                            <path d="M41.5023364,32 C41.5023364,32 40.1583171,32 38.5057303,32 L30.9966061,32 C29.3416262,32 28,30.6609799 28,28.9983345 L28,24" id="Line-Copy-4" stroke="#97A0AF" stroke-width="1" fill="none" stroke-linecap="square"></path>
+                            <rect id="Rectangle-27-Copy-2" stroke="none" fill="#FFFFFF" fill-rule="evenodd" x="42" y="3" width="16" height="10" rx="2"></rect>
+                            <rect id="Rectangle-27-Copy-4" stroke="none" fill="#36B37E" fill-rule="evenodd" x="71" y="27" width="16" height="10" rx="2"></rect>
+                            <path d="M41.5023364,8 C41.5023364,8 40.1583171,8 38.5057303,8 L30.9966061,8 C29.3416262,8 28,9.33902013 28,11.0016655 L28,16" id="Line-Copy-5" stroke="#97A0AF" stroke-width="1" fill="none" stroke-linecap="square"></path>
+                            <rect id="Rectangle-27" stroke="none" fill="#0065FF" fill-rule="evenodd" x="20" y="15" width="16" height="9" rx="2"></rect>
+                        </g>
+                    </g>
+                </g>
+            </g>
+            <rect id="sidenav" fill="#0065FF" mask="url(#mask-2)" x="0" y="0" width="16" height="80"></rect>
+            <g id="top" mask="url(#mask-2)">
+                <rect id="Rectangle-26-Copy-2" fill="#DFE1E6" x="0" y="0" width="120" height="8"></rect>
+                <circle id="Oval-9" fill="#FF5630" cx="4" cy="4" r="2"></circle>
+                <circle id="Oval-9-Copy" fill="#FFC400" cx="10" cy="4" r="2"></circle>
+                <circle id="Oval-9-Copy-2" fill="#0065FF" cx="16" cy="4" r="2"></circle>
+            </g>
+        </g>
+    </g>
+</svg>

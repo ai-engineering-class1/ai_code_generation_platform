@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 144 80" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <!-- Generator: Sketch 51.2 (57519) - http://www.bohemiancoding.com/sketch -->
+    <title>template/thumbnail/project-management</title>
+    <desc>Created with Sketch.</desc>
+    <defs>
+        <rect id="path-1" x="0" y="0" width="120" height="80" rx="3"></rect>
+        <linearGradient x1="82.1401785%" y1="-16.2124912%" x2="50%" y2="100%" id="linearGradient-3">
+            <stop stop-color="#F1F2F4" offset="0%"></stop>
+            <stop stop-color="#C1C7D0" offset="100%"></stop>
+        </linearGradient>
+        <linearGradient x1="0%" y1="49.9953828%" x2="100%" y2="49.9953828%" id="linearGradient-4">
+            <stop stop-color="#C1C7D0" offset="0%"></stop>
+            <stop stop-color="#C4C9D2" offset="3%"></stop>
+            <stop stop-color="#D9DDE3" offset="27%"></stop>
+            <stop stop-color="#E7E8ED" offset="50%"></stop>
+            <stop stop-color="#EBECF0" offset="71%"></stop>
+        </linearGradient>
+        <linearGradient x1="3.58627741%" y1="64.0335456%" x2="100.003003%" y2="49.9953833%" id="linearGradient-5">
+            <stop stop-color="#156AFB" offset="0%"></stop>
+            <stop stop-color="#3888FE" offset="63.250224%"></stop>
+            <stop stop-color="#4C9AFF" offset="100%"></stop>
+        </linearGradient>
+    </defs>
+    <g id="template/thumbnail/project-management" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="template-thumbnail_project-management" transform="translate(12.000000, 0.000000)">
+            <mask id="mask-2" fill="white">
+                <use xlink:href="#path-1"></use>
+            </mask>
+            <use id="BG" fill="#CFD3DB" xlink:href="#path-1"></use>
+            <g id="BG" mask="url(#mask-2)">
+                <g transform="translate(-18.000000, 8.000000)">
+                    <rect id="content" fill="#CFD3DB" x="34" y="0" width="104" height="72" rx="3"></rect>
+                    <path d="M160,12.5 C146.103225,1.51403585 95.5,5.5 66,18.5 C36.5,31.5 0,16 0,16 L10.5,78.5 L140,77 C140,77 173.896775,23.4859642 160,12.5 Z" id="Path-6" fill="url(#linearGradient-3)"></path>
+                </g>
+            </g>
+            <g id="Objects-Empty-Folder" mask="url(#mask-2)" fill-rule="nonzero">
+                <g transform="translate(38.000000, 22.000000)">
+                    <path d="M48.8857143,4.52571429 L21.2457143,4.52571429 C15.7942857,4.52571429 17.32,1.13322759e-15 11.9285714,1.13322759e-15 L1.90285714,1.13322759e-15 C1.39845096,-0.000758506396 0.914444194,0.199084589 0.557506888,0.555485953 C0.200569582,0.911887317 -5.70305884e-07,1.39559325 0,1.9 L0,42.6371429 L50.7857143,42.6371429 L50.7857143,6.42571429 C50.7857143,5.37637326 49.9350553,4.52571429 48.8857143,4.52571429 L48.8857143,4.52571429 Z" id="_Path_" fill="#0065FF"></path>
+                    <path d="M0,42.6371429 L36.0285714,42.6371429 L14.5428571,11.6971429 C10.5989199,11.9258501 6.80758493,13.3011772 3.63428571,15.6542857 C2.26295042,16.6846089 1.04003436,17.8988722 0,19.2628571 L0,42.6371429 Z" id="Shape" fill="url(#linearGradient-4)" style="mix-blend-mode: multiply;"></path>
+                    <path d="M50.7857143,42.6371429 L0,42.6371429 L6.42857143,7.50285714 C6.64744374,7.01245614 7.13440148,6.69677319 7.67142857,6.69714286 L55.48,6.69714286 C55.9409124,6.69682549 56.3706195,6.92997595 56.6216086,7.3165569 C56.8725977,7.70313784 56.9107082,8.19053386 56.7228571,8.61142857 L50.7857143,42.6371429 Z" id="_Path_2-Copy-2" fill="#B3D4FF"></path>
+                    <path d="M50.7857143,42.6371429 L0,42.6371429 L10.4285714,9.50285714 C10.6474437,9.01245614 11.1344015,8.69677319 11.6714286,8.69714286 L59.48,8.69714286 C59.9409124,8.69682549 60.3706195,8.92997595 60.6216086,9.3165569 C60.8725977,9.70313784 60.9107082,10.1905339 60.7228571,10.6114286 L50.7857143,42.6371429 Z" id="_Path_2-Copy" fill="#4C9AFF"></path>
+                    <path d="M50.7857143,42.6371429 L0,42.6371429 L13.4285714,12.5028571 C13.6474437,12.0124561 14.1344015,11.6967732 14.6714286,11.6971429 L62.48,11.6971429 C62.9409124,11.6968255 63.3706195,11.929976 63.6216086,12.3165569 C63.8725977,12.7031378 63.9107082,13.1905339 63.7228571,13.6114286 L50.7857143,42.6371429 Z" id="_Path_2" fill="url(#linearGradient-5)"></path>
+                    <polygon id="Shape" fill="#156AFB" points="11.48 16.8828571 11.2485714 17.4028571 62.0342857 17.4028571 62.2657143 16.8828571"></polygon>
+                    <polygon id="Shape" fill="#156AFB" points="60.5085714 20.8257143 60.74 20.3028571 9.95428571 20.3028571 9.72285714 20.8257143"></polygon>
+                </g>
+            </g>
+            <rect id="sidenav" fill="#0065FF" mask="url(#mask-2)" x="0" y="0" width="16" height="80"></rect>
+            <g id="top" mask="url(#mask-2)">
+                <rect id="Rectangle-26-Copy-2" fill="#DFE1E6" x="0" y="0" width="120" height="8"></rect>
+                <circle id="Oval-9" fill="#FF5630" cx="4" cy="4" r="2"></circle>
+                <circle id="Oval-9-Copy" fill="#FFC400" cx="10" cy="4" r="2"></circle>
+                <circle id="Oval-9-Copy-2" fill="#0065FF" cx="16" cy="4" r="2"></circle>
+            </g>
+        </g>
+    </g>
+</svg>

@@ -1,0 +1,38 @@
+name: Deploy Node.js App to Server
+
+on:
+  push:
+    branches:
+      - main # 监听 main 分支
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Use Node.js v18.18.0
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18.18.0
+          cache: "yarn"
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.5.4
+        with:
+          ssh-private-key: ${{ secrets.SERVER_SSH_KEY }}
+
+      - name: Deploy to remote server via SSH
+        run: |
+          ssh -o StrictHostKeyChecking=no -p ${{ secrets.SERVER_PORT }} ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+            cd /www/ai-business-consultant-service
+            git pull origin main
+            yarn install --frozen-lockfile
+            yarn build
+            pm2 restart ai-consultant
+          EOF

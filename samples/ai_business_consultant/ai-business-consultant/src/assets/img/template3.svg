@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 144 80" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <!-- Generator: Sketch 51.2 (57519) - http://www.bohemiancoding.com/sketch -->
+    <title>template/thumbnail/task-management</title>
+    <desc>Created with Sketch.</desc>
+    <defs>
+        <rect id="path-1" x="0" y="0" width="120" height="80" rx="3"></rect>
+        <rect id="path-3" x="0" y="0" width="104" height="72" rx="3"></rect>
+        <linearGradient x1="82.1401785%" y1="-16.2124912%" x2="50%" y2="100%" id="linearGradient-5">
+            <stop stop-color="#F1F2F4" offset="0%"></stop>
+            <stop stop-color="#C1C7D0" offset="100%"></stop>
+        </linearGradient>
+        <rect id="path-6" x="0" y="0" width="40" height="56" rx="2"></rect>
+        <rect id="path-8" x="0" y="0" width="40" height="56" rx="2"></rect>
+    </defs>
+    <g id="template/thumbnail/task-management" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="template-thumbnail_task-management" transform="translate(12.000000, 0.000000)">
+            <mask id="mask-2" fill="white">
+                <use xlink:href="#path-1"></use>
+            </mask>
+            <use id="BG" fill="#CFD3DB" xlink:href="#path-1"></use>
+            <g id="BG" mask="url(#mask-2)">
+                <g transform="translate(16.000000, 8.000000)">
+                    <mask id="mask-4" fill="white">
+                        <use xlink:href="#path-3"></use>
+                    </mask>
+                    <use id="content" stroke="none" fill="#CFD3DB" fill-rule="evenodd" xlink:href="#path-3"></use>
+                    <path d="M126,12.5 C112.103225,1.51403585 61.5,5.5 32,18.5 C2.5,31.5 -34,16 -34,16 L-23.5,78.5 L106,77 C106,77 139.896775,23.4859642 126,12.5 Z" id="Path-6" stroke="none" fill="url(#linearGradient-5)" fill-rule="evenodd" mask="url(#mask-4)"></path>
+                </g>
+            </g>
+            <g id="Group-15" mask="url(#mask-2)">
+                <g transform="translate(26.000000, 16.000000)">
+                    <mask id="mask-7" fill="white">
+                        <use xlink:href="#path-6"></use>
+                    </mask>
+                    <use id="column" stroke="none" fill="#FFFFFF" fill-rule="evenodd" xlink:href="#path-6"></use>
+                    <rect id="Rectangle-13-Copy-5" stroke="none" fill-opacity="0.0800000057" fill="#091E42" fill-rule="evenodd" mask="url(#mask-7)" x="22" y="32" width="36" height="16" rx="1"></rect>
+                    <g id="card" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd" mask="url(#mask-7)">
+                        <g transform="translate(2.000000, 2.000000)">
+                            <rect id="Rectangle-13-Copy-5" fill="#EBECF0" x="0" y="0" width="36" height="16" rx="1"></rect>
+                            <path d="M2,3.5 C2,3.22385763 2.22226536,3 2.50127411,3 L25.4987259,3 C25.7755719,3 26,3.23193359 26,3.5 C26,3.77614237 25.7777346,4 25.4987259,4 L2.50127411,4 C2.22442806,4 2,3.76806641 2,3.5 Z M2,6.5 C2,6.22385763 2.22226536,6 2.50127411,6 L25.4987259,6 C25.7755719,6 26,6.23193359 26,6.5 C26,6.77614237 25.7777346,7 25.4987259,7 L2.50127411,7 C2.22442806,7 2,6.76806641 2,6.5 Z M2,12.5 C2,12.2238576 2.22563934,12 2.49374104,12 L14.506259,12 C14.7789446,12 15,12.2319336 15,12.5 C15,12.7761424 14.7743607,13 14.506259,13 L2.49374104,13 C2.22105539,13 2,12.7680664 2,12.5 Z" id="Combined-Shape" fill-opacity="0.129999995" fill="#091E42"></path>
+                            <rect id="Rectangle-13-Copy-9" fill="#FFFFFF" x="28" y="8" width="6" height="6" rx="3"></rect>
+                        </g>
+                    </g>
+                </g>
+            </g>
+            <g id="Group-15-Copy" mask="url(#mask-2)">
+                <g transform="translate(70.000000, 16.000000)">
+                    <mask id="mask-9" fill="white">
+                        <use xlink:href="#path-8"></use>
+                    </mask>
+                    <use id="column" stroke="none" fill="#0065FF" fill-rule="evenodd" xlink:href="#path-8"></use>
+                    <rect id="Rectangle-13-Copy-5" stroke="none" fill-opacity="0.0800000057" fill="#091E42" fill-rule="evenodd" mask="url(#mask-9)" x="-22" y="32" width="36" height="16" rx="1"></rect>
+                    <g id="card" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd" mask="url(#mask-9)">
+                        <g transform="translate(2.000000, 2.000000)">
+                            <rect id="Rectangle-13-Copy-5" fill="#4C9AFF" x="0" y="0" width="36" height="16" rx="1"></rect>
+                            <path d="M2,3.5 C2,3.22385763 2.22226536,3 2.50127411,3 L25.4987259,3 C25.7755719,3 26,3.23193359 26,3.5 C26,3.77614237 25.7777346,4 25.4987259,4 L2.50127411,4 C2.22442806,4 2,3.76806641 2,3.5 Z M2,6.5 C2,6.22385763 2.22226536,6 2.50127411,6 L25.4987259,6 C25.7755719,6 26,6.23193359 26,6.5 C26,6.77614237 25.7777346,7 25.4987259,7 L2.50127411,7 C2.22442806,7 2,6.76806641 2,6.5 Z M2,12.5 C2,12.2238576 2.22563934,12 2.49374104,12 L14.506259,12 C14.7789446,12 15,12.2319336 15,12.5 C15,12.7761424 14.7743607,13 14.506259,13 L2.49374104,13 C2.22105539,13 2,12.7680664 2,12.5 Z" id="Combined-Shape" fill="#0065FF"></path>
+                            <rect id="Rectangle-13-Copy-9" fill="#B3D4FF" x="28" y="8" width="6" height="6" rx="3"></rect>
+                        </g>
+                    </g>
+                    <g id="card-copy" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd" mask="url(#mask-9)">
+                        <g transform="translate(2.000000, 20.000000)">
+                            <rect id="Rectangle-13-Copy-5" fill="#4C9AFF" x="0" y="0" width="36" height="16" rx="1"></rect>
+                            <path d="M2,3.5 C2,3.22385763 2.22226536,3 2.50127411,3 L25.4987259,3 C25.7755719,3 26,3.23193359 26,3.5 C26,3.77614237 25.7777346,4 25.4987259,4 L2.50127411,4 C2.22442806,4 2,3.76806641 2,3.5 Z M2,6.5 C2,6.22385763 2.22226536,6 2.50127411,6 L25.4987259,6 C25.7755719,6 26,6.23193359 26,6.5 C26,6.77614237 25.7777346,7 25.4987259,7 L2.50127411,7 C2.22442806,7 2,6.76806641 2,6.5 Z M2,12.5 C2,12.2238576 2.22563934,12 2.49374104,12 L14.506259,12 C14.7789446,12 15,12.2319336 15,12.5 C15,12.7761424 14.7743607,13 14.506259,13 L2.49374104,13 C2.22105539,13 2,12.7680664 2,12.5 Z" id="Combined-Shape" fill="#0065FF"></path>
+                            <rect id="Rectangle-13-Copy-9" fill="#B3D4FF" x="28" y="8" width="6" height="6" rx="3"></rect>
+                        </g>
+                    </g>
+                </g>
+            </g>
+            <rect id="sidenav" fill="#0065FF" mask="url(#mask-2)" x="0" y="0" width="16" height="80"></rect>
+            <g id="card-copy-2" mask="url(#mask-2)">
+                <g transform="translate(51.000000, 45.000000)">
+                    <rect id="Rectangle-13-Copy-5" fill="#57D9A3" x="0" y="0" width="36" height="16" rx="1"></rect>
+                    <path d="M2,3.5 C2,3.22385763 2.22226536,3 2.50127411,3 L25.4987259,3 C25.7755719,3 26,3.23193359 26,3.5 C26,3.77614237 25.7777346,4 25.4987259,4 L2.50127411,4 C2.22442806,4 2,3.76806641 2,3.5 Z M2,6.5 C2,6.22385763 2.22226536,6 2.50127411,6 L25.4987259,6 C25.7755719,6 26,6.23193359 26,6.5 C26,6.77614237 25.7777346,7 25.4987259,7 L2.50127411,7 C2.22442806,7 2,6.76806641 2,6.5 Z M2,12.5 C2,12.2238576 2.22563934,12 2.49374104,12 L14.506259,12 C14.7789446,12 15,12.2319336 15,12.5 C15,12.7761424 14.7743607,13 14.506259,13 L2.49374104,13 C2.22105539,13 2,12.7680664 2,12.5 Z" id="Combined-Shape" fill="#36B37E"></path>
+                    <rect id="Rectangle-13-Copy-9" fill="#ABF5D1" x="28" y="8" width="6" height="6" rx="3"></rect>
+                </g>
+            </g>
+            <g id="top" mask="url(#mask-2)">
+                <rect id="Rectangle-26-Copy-2" fill="#DFE1E6" x="0" y="0" width="120" height="8"></rect>
+                <circle id="Oval-9" fill="#FF5630" cx="4" cy="4" r="2"></circle>
+                <circle id="Oval-9-Copy" fill="#FFC400" cx="10" cy="4" r="2"></circle>
+                <circle id="Oval-9-Copy-2" fill="#0065FF" cx="16" cy="4" r="2"></circle>
+            </g>
+        </g>
+    </g>
+</svg>
