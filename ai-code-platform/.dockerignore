@@ -1,0 +1,12 @@
+# Add Docker volumes to gitignore
+postgres_data/
+redis_data/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Docker
+docker-compose.override.yml
+

@@ -1,3 +1,16 @@
+# Local planning docs
+PROJECT_PLAN.md
+
+# Sample projects and scratch code
+samples/
+
+# Backend virtual environment and env files
+ai-code-platform/backend/venv/
+ai-code-platform/backend/.env
+
+# Frontend dependencies and build output
+ai-code-platform/frontend/node_modules/
+ai-code-platform/frontend/.next/
 # Dependencies
 node_modules/
 yarn.lock
