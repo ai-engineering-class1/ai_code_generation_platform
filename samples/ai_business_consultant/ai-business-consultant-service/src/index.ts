@@ -43,6 +43,7 @@ import FormData from "form-data";
 import axios from "axios";
 
 // import { emailCampaignViewed } from "@/utils/sendEmail";
+require('dotenv').config();
 
 // import { isValidNumber } from "@/utils/validations";
 
@@ -59,17 +60,53 @@ Sentry.init({
 
 const establishDatabaseConnection = async (): Promise<void> => {
   try {
-    await createDatabaseConnection();
+    console.log("Connecting to database...");
+    console.log(`Connection details: ${process.env.DB_TYPE}://${process.env.DB_USERNAME}@${process.env.DB_HOST === 'localhost' ? '127.0.0.1' : process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_DATABASE}`);
+    
+    const connectionPromise = createDatabaseConnection();
+    
+    // Add timeout wrapper - increased to 30 seconds for synchronize operation
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => {
+        reject(new Error("Database connection timeout after 30 seconds. This might be due to:\n" +
+          "1. Database synchronize operation taking too long (first run creates many tables)\n" +
+          "2. Network connectivity issues\n" +
+          "3. Database server not responding\n" +
+          "Please check your database configuration and ensure the database is accessible."));
+      }, 30000); // Increased to 30 seconds
+    });
+    
+    console.log("Waiting for database connection (this may take a while on first run due to table synchronization)...");
+    await Promise.race([connectionPromise, timeoutPromise]);
+    console.log("Database connected successfully");
     scheduleInit();
   } catch (error) {
-    console.log(error);
+    console.error("Database connection error:", error);
+    console.error("Please verify:");
+    console.error(`  - DB_HOST: ${process.env.DB_HOST}`);
+    console.error(`  - DB_PORT: ${process.env.DB_PORT}`);
+    console.error(`  - DB_DATABASE: ${process.env.DB_DATABASE}`);
+    console.error(`  - DB_USERNAME: ${process.env.DB_USERNAME}`);
+    console.error(`  - DB_TYPE: ${process.env.DB_TYPE || 'mysql'}`);
+    console.error("\nTroubleshooting tips:");
+    console.error(`  - Try connecting manually: psql -h ${process.env.DB_HOST || '127.0.0.1'} -p ${process.env.DB_PORT || '5432'} -U ${process.env.DB_USERNAME || 'jira_user'} -d ${process.env.DB_DATABASE || 'easiio_ai_consultant'}`);
+    console.error("  - Check if PostgreSQL container is running: docker ps | findstr pg_db");
+    console.error("  - Check PostgreSQL logs: docker logs pg_db");
+    console.error("  - Verify password in .env matches docker-compose.yml (should be: jira_password)");
+    console.error("  - Try restarting Docker Desktop if on Windows");
+    throw error;
   }
 };
 
 const initExpressGraphql = async () => {
+  console.log("Building GraphQL schema...");
   const schema = await buildSchema({
     resolvers: RESOLVERS,
-  }).catch((err) => console.log(err));
+  }).catch((err) => {
+    console.error("Schema build error:", err);
+    throw err;
+  });
+  console.log("GraphQL schema built successfully");
 
   const apolloServer = new ApolloServer({
     schema: schema as GraphQLSchema,
@@ -639,16 +676,22 @@ const initExpressGraphql = async () => {
   //   mailListenerStart(model);
   // }
 
-  app.listen(process.env.PORT || 7001, () => {
+  const port = process.env.PORT || 7001;
+  app.listen(port, () => {
     console.log(
-      `ai consultant server started on http://localhost:7001${apolloServer.graphqlPath}`
+      `ai consultant server started on http://localhost:${port}${apolloServer.graphqlPath}`
     );
   });
 };
 
 const bootstrap = async (): Promise<void> => {
-  await establishDatabaseConnection();
-  initExpressGraphql();
+  try {
+    await establishDatabaseConnection();
+    await initExpressGraphql();
+  } catch (error) {
+    console.error("Bootstrap error:", error);
+    process.exit(1);
+  }
 };
 
 bootstrap();

@@ -63,7 +63,11 @@ async def create_task(
             detail="Project not found"
         )
     
-    new_task = Task(**task_data.dict())
+    # Create task with project_id from URL path
+    # Use by_alias=False to get snake_case field names for the database
+    task_dict = task_data.dict(by_alias=False)
+    task_dict['project_id'] = project_id
+    new_task = Task(**task_dict)
     
     db.add(new_task)
     db.commit()
@@ -92,20 +96,42 @@ async def get_task(
             detail="Project not found"
         )
     
-    task = db.query(Task).options(
-        joinedload(Task.specification),
-        joinedload(Task.code_generation),
-        joinedload(Task.workflow_history)
-    ).filter(
+    from app.models.workflow import Specification, CodeGeneration
+    from app.models.notification import TaskWorkflowHistory
+    
+    print(f"Fetching task: task_id={task_id}, project_id={project_id}")
+    task = db.query(Task).filter(
         Task.id == task_id,
         Task.project_id == project_id
     ).first()
     
     if not task:
+        print(f"Task not found: task_id={task_id}, project_id={project_id}")
+        # Debug: Check if task exists with different project_id
+        task_anywhere = db.query(Task).filter(Task.id == task_id).first()
+        if task_anywhere:
+            print(f"Task exists but with different project_id: {task_anywhere.project_id}")
+        else:
+            print(f"Task with id {task_id} does not exist at all")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Task not found"
+            detail=f"Task not found: task_id={task_id}, project_id={project_id}"
         )
+    
+    print(f"Task found: {task.id} - {task.title}")
+    
+    # Load related data
+    task.specification = db.query(Specification).filter(
+        Specification.task_id == task_id
+    ).order_by(Specification.version.desc()).first()
+    
+    task.code_generation = db.query(CodeGeneration).filter(
+        CodeGeneration.task_id == task_id
+    ).order_by(CodeGeneration.created_at.desc()).first()
+    
+    task.workflow_history = db.query(TaskWorkflowHistory).filter(
+        TaskWorkflowHistory.task_id == task_id
+    ).order_by(TaskWorkflowHistory.created_at.desc()).all()
     
     return task
 

@@ -69,52 +69,130 @@ export const createRandomNumber = async (len: number) => {
   return str;
 };
 
+// Helper function to create Redis client with error handling
+const createRedisClient = (): redis | null => {
+  if (!process.env.REDIS_URL || process.env.REDIS_URL.trim() === '') {
+    return null;
+  }
+  const client = new redis(process.env.REDIS_URL, {
+    retryStrategy: (times) => Math.min(times * 50, 2000),
+    maxRetriesPerRequest: 3,
+    lazyConnect: true,
+  });
+  client.on('error', (err) => {
+    console.error('[Redis] Error in common.ts:', err.message);
+  });
+  return client;
+};
+
 export const getMiniWechatAccessToken = async () => {
-  const client = new redis(process.env.REDIS_URL);
-  client.select(0);
-  let access_token = await client.get(`miniWechat_paperwork_notice_key`);
-  console.log(`redis MiniWechat access_token:${access_token}`);
-  if (access_token === null || access_token === "") {
+  const client = createRedisClient();
+  if (!client) {
+    // If Redis is not available, fetch token directly without caching
     const res = await axios.get(
       `https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${process.env.MINI_WECHAT_AppID}&secret=${process.env.MINI_WECHAT_AppSecret}`
     );
-    console.log(res.data);
-    access_token = res.data.access_token;
-    client.set(`miniWechat_paperwork_notice_key`, access_token!, "EX", 7200);
+    return res.data.access_token;
   }
-  return access_token;
+  try {
+    client.select(0);
+    let access_token = await client.get(`miniWechat_paperwork_notice_key`);
+    console.log(`redis MiniWechat access_token:${access_token}`);
+    if (access_token === null || access_token === "") {
+      const res = await axios.get(
+        `https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${process.env.MINI_WECHAT_AppID}&secret=${process.env.MINI_WECHAT_AppSecret}`
+      );
+      console.log(res.data);
+      access_token = res.data.access_token;
+      try {
+        client.set(`miniWechat_paperwork_notice_key`, access_token!, "EX", 7200);
+      } catch (err) {
+        console.warn('[Redis] Failed to cache token:', err);
+      }
+    }
+    return access_token;
+  } catch (err) {
+    console.warn('[Redis] Failed to get token from cache:', err);
+    // Fallback: fetch directly
+    const res = await axios.get(
+      `https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${process.env.MINI_WECHAT_AppID}&secret=${process.env.MINI_WECHAT_AppSecret}`
+    );
+    return res.data.access_token;
+  }
 };
 
 export const getAccessToken = async () => {
-  const client = new redis(process.env.REDIS_URL);
-  client.select(0);
-  let access_token = await client.get(`paperwork_notice_key`);
-  console.log(`redis access_token:${access_token}`);
-  if (access_token === null || access_token === "") {
+  const client = createRedisClient();
+  if (!client) {
+    // If Redis is not available, fetch token directly without caching
     const res = await axios.get(
       `https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${process.env.WECHAT_AppID}&secret=${process.env.WECHAT_AppSecret}`
     );
-    console.log(res.data);
-    access_token = res.data.access_token;
-    client.set(`paperwork_notice_key`, access_token!, "EX", 7200);
+    return res.data.access_token;
   }
-  return access_token;
+  try {
+    client.select(0);
+    let access_token = await client.get(`paperwork_notice_key`);
+    console.log(`redis access_token:${access_token}`);
+    if (access_token === null || access_token === "") {
+      const res = await axios.get(
+        `https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${process.env.WECHAT_AppID}&secret=${process.env.WECHAT_AppSecret}`
+      );
+      console.log(res.data);
+      access_token = res.data.access_token;
+      try {
+        client.set(`paperwork_notice_key`, access_token!, "EX", 7200);
+      } catch (err) {
+        console.warn('[Redis] Failed to cache token:', err);
+      }
+    }
+    return access_token;
+  } catch (err) {
+    console.warn('[Redis] Failed to get token from cache:', err);
+    // Fallback: fetch directly
+    const res = await axios.get(
+      `https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${process.env.WECHAT_AppID}&secret=${process.env.WECHAT_AppSecret}`
+    );
+    return res.data.access_token;
+  }
 };
 
 export const getJsapiTicket = async () => {
-  const client = new redis(process.env.REDIS_URL);
-  client.select(0);
-  let jsapi_ticket = await client.get(`jsapi_ticket`);
-  console.log(`redis jsapi_ticket:${jsapi_ticket}`);
-  if (jsapi_ticket === null || jsapi_ticket === "") {
+  const client = createRedisClient();
+  if (!client) {
+    // If Redis is not available, fetch ticket directly without caching
+    const accessToken = await getAccessToken();
     const res = await axios.get(
-      `https://api.weixin.qq.com/cgi-bin/ticket/getticket?access_token=${await getAccessToken()}&type=jsapi`
+      `https://api.weixin.qq.com/cgi-bin/ticket/getticket?access_token=${accessToken}&type=jsapi`
     );
-    console.log(res.data);
-    jsapi_ticket = res.data.ticket;
-    client.set(`jsapi_ticket`, jsapi_ticket!, "EX", 7200);
+    return res.data.ticket;
   }
-  return jsapi_ticket;
+  try {
+    client.select(0);
+    let jsapi_ticket = await client.get(`jsapi_ticket`);
+    console.log(`redis jsapi_ticket:${jsapi_ticket}`);
+    if (jsapi_ticket === null || jsapi_ticket === "") {
+      const res = await axios.get(
+        `https://api.weixin.qq.com/cgi-bin/ticket/getticket?access_token=${await getAccessToken()}&type=jsapi`
+      );
+      console.log(res.data);
+      jsapi_ticket = res.data.ticket;
+      try {
+        client.set(`jsapi_ticket`, jsapi_ticket!, "EX", 7200);
+      } catch (err) {
+        console.warn('[Redis] Failed to cache ticket:', err);
+      }
+    }
+    return jsapi_ticket;
+  } catch (err) {
+    console.warn('[Redis] Failed to get jsapi_ticket from cache:', err);
+    // Fallback: fetch directly
+    const accessToken = await getAccessToken();
+    const res = await axios.get(
+      `https://api.weixin.qq.com/cgi-bin/ticket/getticket?access_token=${accessToken}&type=jsapi`
+    );
+    return res.data.ticket;
+  }
 };
 
 export const parseJsonSafely = async (jsonString: string) => {

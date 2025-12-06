@@ -1,9 +1,9 @@
 <template>
-  <div ref="$rootRef" class="scrollOverlay">
+  <div ref="$rootRef" class="scrollOverlay" @click.self="handleModalClose">
     <div :class="['clickableOverlay', variant]">
       <div ref="$modalRef" :style="modalStyles" :class="['modal', variant]">
         <component
-          @close="$emit('close')"
+          @close="() => { console.log('Modal: close event from component'); $emit('close'); }"
           @confirm="$emit('confirm')"
           v-bind="componentProps"
           :is="component"
@@ -43,15 +43,22 @@ export default defineComponent({
     const modalStyles = computed(() => ({
       '--width': `${props.width}px`,
     }));
-    const handleModalClose = (e: string) => emit('close', e);
+    const handleModalClose = (e?: string) => emit('close', e);
     const handleConfirm = () => emit('confirm');
 
     // useOutsideClick($rootRef, $modalRef, handleModalClose);
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleModalClose();
+      }
+    };
     onMounted(() => {
       document.body.style.overflow = 'hidden';
+      document.addEventListener('keydown', handleEscape);
     });
     onUnmounted(() => {
       document.body.style.overflow = 'visible';
+      document.removeEventListener('keydown', handleEscape);
     });
 
     return {

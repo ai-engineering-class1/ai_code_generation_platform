@@ -21,6 +21,7 @@ class Specification(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
     # Relationships
+    task = relationship("Task", back_populates="specifications")
     code_generations = relationship("CodeGeneration", back_populates="specification")
 
 
@@ -47,6 +48,7 @@ class CodeGeneration(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
     # Relationships
+    task = relationship("Task", back_populates="code_generations")
     specification = relationship("Specification", back_populates="code_generations")
     pipeline_executions = relationship("PipelineExecution", back_populates="code_generation")
 

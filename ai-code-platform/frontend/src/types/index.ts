@@ -56,6 +56,7 @@ export interface JiraConfiguration {
   projectId: string
   jiraUrl: string
   jiraProjectKey: string
+  jiraEmail: string
   syncEnabled: boolean
   lastSyncAt?: string
   createdAt: string
@@ -174,6 +175,7 @@ export interface CreateTaskData {
 export interface ConfigureJiraData {
   jiraUrl: string
   jiraProjectKey: string
+  jiraEmail: string
   accessToken: string
   webhookSecret?: string
   syncEnabled?: boolean

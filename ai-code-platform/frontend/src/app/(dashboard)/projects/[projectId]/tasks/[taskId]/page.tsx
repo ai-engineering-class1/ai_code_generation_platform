@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useQuery } from '@tantml:react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import { ArrowLeft, Clock, User, FileText, GitPullRequest, CheckCircle2, AlertCircle } from 'lucide-react'
 import apiClient from '@/lib/api'
@@ -24,11 +24,28 @@ export default function TaskDetailPage({
     }
   }, [router])
 
+  const queryClient = useQueryClient()
+
   const { data: task, isLoading } = useQuery<TaskDetail>({
     queryKey: ['task', projectId, taskId],
     queryFn: async () => {
       const response = await apiClient.get(`/projects/${projectId}/tasks/${taskId}`)
       return response.data
+    },
+  })
+
+  const generateSpecMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiClient.post(`/github/generate-spec/${taskId}`)
+      return response.data
+    },
+    onSuccess: () => {
+      // Refresh task data to show the new specification
+      queryClient.invalidateQueries({ queryKey: ['task', projectId, taskId] })
+      alert('Specification generation started! It may take a few moments.')
+    },
+    onError: (error: any) => {
+      alert(`Failed to generate specification: ${error.response?.data?.detail || error.message}`)
     },
   })
 
@@ -220,10 +237,10 @@ export default function TaskDetailPage({
                   </span>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600 mb-1">Current Stage</p>
-                  <span className="inline-block px-2 py-1 bg-blue-100 text-blue-800 text-sm rounded">
-                    {task.currentStage.replace(/_/g, ' ')}
-                  </span>
+  <p className="text-sm text-gray-600 mb-1">Current Stage</p>
+  <span className="inline-block px-2 py-1 bg-blue-100 text-blue-800 text-sm rounded">
+    {task.currentStage?.replace(/_/g, ' ') || 'N/A'}
+  </span>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600 mb-1">Created</p>
@@ -243,8 +260,12 @@ export default function TaskDetailPage({
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Actions</h2>
               <div className="space-y-2">
                 {!task.specification && (
-                  <button className="w-full px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition">
-                    Generate Specification
+                  <button
+                    onClick={() => generateSpecMutation.mutate()}
+                    disabled={generateSpecMutation.isPending}
+                    className="w-full px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {generateSpecMutation.isPending ? 'Generating...' : 'Generate Specification'}
                   </button>
                 )}
                 {task.specification && task.specification.approved && !task.codeGeneration && (

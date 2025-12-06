@@ -48,7 +48,10 @@ export default defineComponent({
       isWorking.value = true;
       emit('confirm');
     };
-    const handleClose = () => emit('close');
+    const handleClose = () => {
+      console.log('Cancel button clicked, emitting close event');
+      emit('close');
+    };
 
     onUnmounted(() => {
       isWorking.value = false;

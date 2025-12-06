@@ -28,8 +28,8 @@ const getToken = async function (): Promise<string> {
   console.log(payload);
   const token = jwt.sign(payload, secret, {
     algorithm: "HS256",
-    header: { alg: "HS256", sign_type: "SIGN" },
-  });
+    header: { alg: "HS256" },
+  } as any);
   console.log(token);
   return token;
 };

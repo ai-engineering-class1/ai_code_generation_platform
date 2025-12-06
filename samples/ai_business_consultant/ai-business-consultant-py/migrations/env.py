@@ -4,9 +4,19 @@ from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import AsyncEngine, async_engine_from_config  # 新增异步引擎
 from alembic import context
 from sqlmodel import SQLModel  # 确保SQLModel导入
+from dotenv import load_dotenv
+import os
+
+# Load environment variables from .env file
+load_dotenv()
 
 # 原有配置保持不变
 config = context.config
+
+# Override sqlalchemy.url from environment variable if available
+database_url = os.getenv("DATABASE_URL")
+if database_url:
+    config.set_main_option("sqlalchemy.url", database_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

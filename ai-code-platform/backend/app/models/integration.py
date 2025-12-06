@@ -12,7 +12,8 @@ class JiraConfiguration(Base):
     project_id = Column(String, ForeignKey("projects.id"), nullable=False)
     jira_url = Column(String(500), nullable=False)
     jira_project_key = Column(String(50), nullable=False)
-    access_token = Column(Text)  # Encrypted in production
+    jira_email = Column(String(255), nullable=False)  # Email for Basic auth
+    access_token = Column(Text)  # API token - Encrypted in production
     webhook_secret = Column(String(255))
     sync_enabled = Column(Boolean, default=True)
     last_sync_at = Column(DateTime(timezone=True))

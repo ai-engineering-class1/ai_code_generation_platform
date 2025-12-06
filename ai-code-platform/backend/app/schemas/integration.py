@@ -13,6 +13,7 @@ class CamelCaseModel(BaseModel):
 class JiraConfigBase(CamelCaseModel):
     jira_url: str = Field(..., alias="jiraUrl")
     jira_project_key: str = Field(..., alias="jiraProjectKey")
+    jira_email: str = Field(..., alias="jiraEmail")
     sync_enabled: Optional[bool] = Field(True, alias="syncEnabled")
 
 
@@ -25,6 +26,7 @@ class JiraConfigCreate(JiraConfigBase):
 class JiraConfigUpdate(CamelCaseModel):
     jira_url: Optional[str] = Field(None, alias="jiraUrl")
     jira_project_key: Optional[str] = Field(None, alias="jiraProjectKey")
+    jira_email: Optional[str] = Field(None, alias="jiraEmail")
     access_token: Optional[str] = Field(None, alias="accessToken")
     sync_enabled: Optional[bool] = Field(None, alias="syncEnabled")
 

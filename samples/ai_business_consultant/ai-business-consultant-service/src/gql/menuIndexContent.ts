@@ -92,8 +92,14 @@ class MenuIndexContentResolver {
         ? `${sfbotCharacter.sfbotId},c${sfbotCharacter.id}`
         : sfbots,
     };
-    redis.select(2);
-    redis.lpush(`queue:file:indexing`, JSON.stringify(jsonInput));
+    if (redis) {
+      try {
+        redis.select(2);
+        redis.lpush(`queue:file:indexing`, JSON.stringify(jsonInput));
+      } catch (err) {
+        console.warn('[Redis] Failed to queue file indexing:', err);
+      }
+    }
     // const res = await MenuIndexContent.findOneOrFail(model.id, {
     //   relations: ["sfbots", "sfbotCharacter"],
     // });
@@ -187,8 +193,14 @@ class MenuIndexContentResolver {
         ? `${sfbotCharacter.sfbotId},c${sfbotCharacter.id}`
         : sfbots,
     };
-    redis.select(2);
-    redis.lpush(`queue:file:indexing`, JSON.stringify(jsonInput));
+    if (redis) {
+      try {
+        redis.select(2);
+        redis.lpush(`queue:file:indexing`, JSON.stringify(jsonInput));
+      } catch (err) {
+        console.warn('[Redis] Failed to queue file indexing:', err);
+      }
+    }
     // if (process.env.HOST_NAME === "sflow.io") {
     //   await updateElasticsearchById("menu_index_content", `${model.id}`, {
     //     category: model.type,
@@ -239,8 +251,14 @@ class MenuIndexContentResolver {
           category: tempModel.type,
           orgid: tempModel.organizationId,
         };
-        redis.select(2);
-        redis.lpush(`queue:file:indexing`, JSON.stringify(jsonInput));
+        if (redis) {
+          try {
+            redis.select(2);
+            redis.lpush(`queue:file:indexing`, JSON.stringify(jsonInput));
+          } catch (err) {
+            console.warn('[Redis] Failed to queue file indexing:', err);
+          }
+        }
 
         // if (process.env.HOST_NAME === "sflow.io") {
         //   await deleteElasticsearchById(
@@ -258,8 +276,14 @@ class MenuIndexContentResolver {
         category: parentModel.type,
         orgid: parentModel.organizationId,
       };
-      redis.select(2);
-      redis.lpush(`queue:file:indexing`, JSON.stringify(jsonInput));
+      if (redis) {
+        try {
+          redis.select(2);
+          redis.lpush(`queue:file:indexing`, JSON.stringify(jsonInput));
+        } catch (err) {
+          console.warn('[Redis] Failed to queue file indexing:', err);
+        }
+      }
 
       //   if (process.env.HOST_NAME === "sflow.io") {
       //     await deleteElasticsearchById(

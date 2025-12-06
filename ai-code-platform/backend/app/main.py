@@ -4,6 +4,12 @@ from app.core.config import settings
 from app.api.v1.api import api_router
 from app.core.database import Base, engine
 
+# Import all models to ensure relationships are properly configured
+# This ensures SQLAlchemy can resolve string references in relationships
+from app.models import user, project, task, integration, workflow, notification
+from app.models.notification import TaskWorkflowHistory  # Explicitly import for relationship resolution
+from app.models.workflow import Specification, CodeGeneration  # Explicitly import for relationship resolution
+
 # Create database tables
 Base.metadata.create_all(bind=engine)
 

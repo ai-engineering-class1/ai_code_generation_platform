@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
-import { ArrowLeft, Save, RefreshCw, Info } from 'lucide-react'
+import { ArrowLeft, Save, RefreshCw, Info, CheckCircle2, ExternalLink, Plus } from 'lucide-react'
 import apiClient from '@/lib/api'
 import { Project, JiraConfiguration, GitHubConfiguration } from '@/types'
 import UserMenu from '@/components/UserMenu'
@@ -14,11 +14,62 @@ export default function ProjectSettingsPage({ params }: { params: { projectId: s
   const queryClient = useQueryClient()
   const { projectId } = params
 
+  // Helper function to get Jira URLs
+  const getJiraUrls = (jiraUrl: string, projectKey: string) => {
+    // Clean up the URL - extract just the base domain
+    let baseUrl = jiraUrl.trim()
+    
+    // Remove trailing slash
+    baseUrl = baseUrl.replace(/\/$/, '')
+    
+    // Extract just the domain (remove any existing paths like /wiki/home, /jira, etc.)
+    try {
+      const urlObj = new URL(baseUrl)
+      // Keep only the protocol and hostname (e.g., https://joygu2022.atlassian.net)
+      baseUrl = `${urlObj.protocol}//${urlObj.hostname}`
+    } catch (e) {
+      // If URL parsing fails, try to extract domain manually
+      const match = baseUrl.match(/https?:\/\/[^\/]+/)
+      if (match) {
+        baseUrl = match[0]
+      }
+    }
+    
+    // For Jira Cloud (atlassian.net) - use classic format which is most reliable
+    if (baseUrl.includes('atlassian.net')) {
+      return {
+        // Classic format (most reliable - works for all Jira products)
+        createIssue: `${baseUrl}/secure/CreateIssue!default.jspa?project=${projectKey}`,
+        // Alternative: Jira Core format
+        createIssueCore: `${baseUrl}/jira/core/projects/${projectKey}/issues/create`,
+        // Alternative: Jira Software format
+        createIssueSoftware: `${baseUrl}/jira/software/projects/${projectKey}/issues/create`,
+        // Project list page with JQL filter (shows actual task list)
+        projectList: `${baseUrl}/jira/core/projects/${projectKey}/list?jql=project%20%3D%20%22${projectKey}%22%20ORDER%20BY%20created%20DESC`,
+        // Project browse page (alternative)
+        projectBrowse: `${baseUrl}/browse/${projectKey}`
+      }
+    }
+    
+    // For Jira Server/Data Center
+    return {
+      // Classic create issue URL
+      createIssue: `${baseUrl}/secure/CreateIssue!default.jspa?project=${projectKey}`,
+      // Alternative format
+      createIssueAlt: `${baseUrl}/secure/CreateIssueDetails!init.jspa?project=${projectKey}`,
+      // Project browse page
+      projectBoard: `${baseUrl}/browse/${projectKey}`,
+      projectBrowse: `${baseUrl}/browse/${projectKey}`,
+      projectPage: `${baseUrl}/browse/${projectKey}`
+    }
+  }
+
   const [activeTab, setActiveTab] = useState<'general' | 'jira' | 'github'>('general')
   const [projectData, setProjectData] = useState({ name: '', description: '' })
   const [jiraData, setJiraData] = useState({
     jiraUrl: '',
     jiraProjectKey: '',
+    jiraEmail: '',
     accessToken: '',
     syncEnabled: true,
   })
@@ -90,6 +141,7 @@ export default function ProjectSettingsPage({ params }: { params: { projectId: s
       setJiraData({
         jiraUrl: jiraConfig.jiraUrl,
         jiraProjectKey: jiraConfig.jiraProjectKey,
+        jiraEmail: jiraConfig.jiraEmail || '',
         accessToken: '', // Don't show existing token
         syncEnabled: jiraConfig.syncEnabled,
       })
@@ -125,13 +177,26 @@ export default function ProjectSettingsPage({ params }: { params: { projectId: s
     mutationFn: async (data: any) => {
       const response = await apiClient.post('/jira/config', {
         ...data,
-        project_id: projectId,
+        projectId: projectId,
       })
       return response.data
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['jiraConfig', projectId] })
       alert('Jira configuration saved successfully!')
+      // Reset form if needed
+      setJiraData({
+        jiraUrl: '',
+        jiraProjectKey: '',
+        jiraEmail: '',
+        accessToken: '',
+        syncEnabled: true,
+      })
+    },
+    onError: (error: any) => {
+      console.error('Jira configuration error:', error)
+      const errorMessage = error.response?.data?.detail || error.message || 'Failed to save Jira configuration'
+      alert(`Error: ${errorMessage}`)
     },
   })
 
@@ -153,11 +218,23 @@ export default function ProjectSettingsPage({ params }: { params: { projectId: s
   // Sync Jira issues
   const syncJiraMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiClient.post(`/jira/sync/${projectId}`)
-      return response.data
+      console.log('Calling sync endpoint:', `/jira/sync/${projectId}`)
+      try {
+        const response = await apiClient.post(`/jira/sync/${projectId}`)
+        console.log('Sync response:', response.data)
+        return response.data
+      } catch (error: any) {
+        console.error('Sync error:', error)
+        console.error('Error response:', error.response?.data)
+        throw error
+      }
     },
     onSuccess: () => {
       alert('Jira sync started!')
+    },
+    onError: (error: any) => {
+      console.error('Sync mutation error:', error)
+      alert(`Error starting sync: ${error.response?.data?.detail || error.message}`)
     },
   })
 
@@ -168,21 +245,53 @@ export default function ProjectSettingsPage({ params }: { params: { projectId: s
 
   const handleJiraSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    const payload = { ...jiraData }
-    // Remove empty access token if not updating
-    if (!payload.accessToken) {
-      delete payload.accessToken
+    
+    // Validate required fields
+    if (!jiraData.jiraUrl || !jiraData.jiraProjectKey || !jiraData.jiraEmail) {
+      alert('Please fill in all required fields: Jira URL, Project Key, and Email')
+      return
     }
+    
+    // If updating existing config, accessToken is optional
+    // If creating new config, accessToken is required
+    if (!jiraConfig && !jiraData.accessToken) {
+      alert('Please provide a Jira API Token')
+      return
+    }
+    
+    // Build payload - only include accessToken if it's provided
+    const payload: any = {
+      jiraUrl: jiraData.jiraUrl,
+      jiraProjectKey: jiraData.jiraProjectKey,
+      jiraEmail: jiraData.jiraEmail,
+      syncEnabled: jiraData.syncEnabled,
+    }
+    
+    // Only include accessToken if it's provided
+    if (jiraData.accessToken) {
+      payload.accessToken = jiraData.accessToken
+    }
+    
+    console.log('Submitting Jira config:', payload) // Debug log
     configureJiraMutation.mutate(payload)
   }
 
   const handleGitHubSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    const payload = { ...githubData }
-    // Remove empty access token if not updating
-    if (!payload.accessToken) {
-      delete payload.accessToken
+    
+    // Build payload - only include accessToken if it's provided
+    const payload: any = {
+      repoOwner: githubData.repoOwner,
+      repoName: githubData.repoName,
+      branchPrefix: githubData.branchPrefix,
+      autoMerge: githubData.autoMerge,
     }
+    
+    // Only include accessToken if it's provided
+    if (githubData.accessToken) {
+      payload.accessToken = githubData.accessToken
+    }
+    
     configureGitHubMutation.mutate(payload)
   }
 
@@ -361,6 +470,24 @@ export default function ProjectSettingsPage({ params }: { params: { projectId: s
                 </div>
 
                 <div>
+                  <label htmlFor="jiraEmail" className="block text-sm font-medium text-gray-700 mb-2">
+                    Jira Email Address *
+                  </label>
+                  <input
+                    type="email"
+                    id="jiraEmail"
+                    required
+                    value={jiraData.jiraEmail}
+                    onChange={(e) => setJiraData({ ...jiraData, jiraEmail: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="your-email@example.com"
+                  />
+                  <p className="mt-1 text-sm text-gray-500">
+                    The email address associated with your Jira account
+                  </p>
+                </div>
+
+                <div>
                   <label htmlFor="jiraProjectKey" className="block text-sm font-medium text-gray-700 mb-2">
                     Jira Project Key *
                   </label>
@@ -377,16 +504,30 @@ export default function ProjectSettingsPage({ params }: { params: { projectId: s
 
                 <div>
                   <label htmlFor="jiraAccessToken" className="block text-sm font-medium text-gray-700 mb-2">
-                    Jira API Token {jiraConfig && '(Leave empty to keep existing)'}
+                    Jira API Token * {jiraConfig && '(Leave empty to keep existing)'}
                   </label>
+                  {jiraConfig && (
+                    <div className="mb-2 p-2 bg-green-50 border border-green-200 rounded-md">
+                      <p className="text-sm text-green-800 flex items-center">
+                        <CheckCircle2 className="h-4 w-4 mr-1" />
+                        Token is saved (hidden for security)
+                      </p>
+                    </div>
+                  )}
                   <input
                     type="password"
                     id="jiraAccessToken"
+                    required={!jiraConfig}
                     value={jiraData.accessToken}
                     onChange={(e) => setJiraData({ ...jiraData, accessToken: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Your Jira API token"
+                    placeholder={jiraConfig ? "Enter new token to update" : "Your Jira API token"}
                   />
+                  {jiraConfig && (
+                    <p className="mt-1 text-sm text-gray-500">
+                      Leave empty to keep the existing token, or enter a new one to update it
+                    </p>
+                  )}
                 </div>
 
                 <div className="flex items-center">
@@ -403,17 +544,55 @@ export default function ProjectSettingsPage({ params }: { params: { projectId: s
                 </div>
 
                 <div className="flex items-center justify-between pt-4">
-                  {jiraConfig && (
-                    <button
-                      type="button"
-                      onClick={() => syncJiraMutation.mutate()}
-                      disabled={syncJiraMutation.isPending}
-                      className="inline-flex items-center px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition disabled:opacity-50"
-                    >
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      {syncJiraMutation.isPending ? 'Syncing...' : 'Sync Now'}
-                    </button>
-                  )}
+                  <div className="flex flex-col gap-3">
+                    {jiraConfig && (() => {
+                      const jiraUrls = getJiraUrls(jiraConfig.jiraUrl, jiraConfig.jiraProjectKey)
+                      return (
+                        <>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <a
+                              href={jiraUrls.createIssue}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
+                              title="Open Jira create issue page (classic format)"
+                            >
+                              <Plus className="h-4 w-4 mr-2" />
+                              Create Task in Jira
+                              <ExternalLink className="h-4 w-4 ml-2" />
+                            </a>
+                            <a
+                              href={jiraUrls.projectList || jiraUrls.projectBrowse}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center px-3 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition"
+                              title="Open Jira task list page"
+                            >
+                              <ExternalLink className="h-4 w-4 mr-1" />
+                              View Tasks in Jira
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                console.log('Sync Now button clicked!')
+                                console.log('Project ID:', projectId)
+                                console.log('Jira config exists:', !!jiraConfig)
+                                syncJiraMutation.mutate()
+                              }}
+                              disabled={syncJiraMutation.isPending}
+                              className="inline-flex items-center px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition disabled:opacity-50"
+                            >
+                              <RefreshCw className="h-4 w-4 mr-2" />
+                              {syncJiraMutation.isPending ? 'Syncing...' : 'Sync Now'}
+                            </button>
+                          </div>
+                          <p className="text-xs text-gray-500">
+                            💡 If "Create Task" doesn't work, use "Jira Project" button and click the "Create" button in Jira.
+                          </p>
+                        </>
+                      )
+                    })()}
+                  </div>
                   <button
                     type="submit"
                     disabled={configureJiraMutation.isPending}

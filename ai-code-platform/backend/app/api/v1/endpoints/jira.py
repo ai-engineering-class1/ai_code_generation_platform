@@ -34,24 +34,34 @@ async def create_jira_config(
             detail="Project not found"
         )
     
-    # Check if config already exists
+    # Check if config already exists - update if it does, create if it doesn't
     existing_config = db.query(JiraConfiguration).filter(
         JiraConfiguration.project_id == config_data.project_id
     ).first()
     
     if existing_config:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Jira configuration already exists for this project"
-        )
-    
-    # Create new config
-    new_config = JiraConfiguration(**config_data.dict())
-    db.add(new_config)
-    db.commit()
-    db.refresh(new_config)
-    
-    return new_config
+        # Update existing config
+        config_dict = config_data.model_dump(exclude_unset=True)
+        # Don't update access_token if not provided
+        if 'access_token' not in config_dict or not config_dict['access_token']:
+            config_dict.pop('access_token', None)
+        # Don't update jira_email if not provided (keep existing)
+        if 'jira_email' not in config_dict or not config_dict['jira_email']:
+            config_dict.pop('jira_email', None)
+        
+        for field, value in config_dict.items():
+            setattr(existing_config, field, value)
+        
+        db.commit()
+        db.refresh(existing_config)
+        return existing_config
+    else:
+        # Create new config
+        new_config = JiraConfiguration(**config_data.model_dump())
+        db.add(new_config)
+        db.commit()
+        db.refresh(new_config)
+        return new_config
 
 
 @router.get("/config/{project_id}", response_model=JiraConfigResponse)
@@ -94,11 +104,17 @@ async def sync_jira_issues(
     current_user: User = Depends(get_current_active_user)
 ):
     """Trigger Jira issues sync for a project"""
+    print(f"=== SYNC ENDPOINT CALLED ===")
+    print(f"Project ID: {project_id}")
+    print(f"User ID: {current_user.id}")
+    
     # Verify project ownership
     project = db.query(Project).filter(
         Project.id == project_id,
         Project.owner_id == current_user.id
     ).first()
+    
+    print(f"Project found: {project is not None}")
     
     if not project:
         raise HTTPException(
@@ -117,8 +133,27 @@ async def sync_jira_issues(
         )
     
     # Add sync task to background
+    # Note: We pass the config ID and project_id, not the db session
+    # The background task will create its own db session
+    from app.core.database import SessionLocal
     jira_service = JiraService(config)
-    background_tasks.add_task(jira_service.sync_issues, db, project_id)
+    
+    async def sync_task():
+        print(f"=== Background sync task started for project {project_id} ===")
+        db_session = SessionLocal()
+        try:
+            await jira_service.sync_issues(db_session, project_id)
+            print(f"=== Background sync task completed for project {project_id} ===")
+        except Exception as e:
+            print(f"ERROR in background sync task: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            db_session.close()
+    
+    print(f"Adding background sync task for project {project_id}")
+    background_tasks.add_task(sync_task)
+    print(f"Background sync task added successfully")
     
     return {"message": "Sync started", "project_id": project_id}
 

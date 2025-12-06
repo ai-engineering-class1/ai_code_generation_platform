@@ -29,4 +29,5 @@ class User(Base):
     # Relationships
     owned_projects = relationship("Project", back_populates="owner", foreign_keys="Project.owner_id")
     assigned_tasks = relationship("Task", back_populates="assignee", foreign_keys="Task.assignee_id")
+    notifications = relationship("Notification", back_populates="user")
 

@@ -63,4 +63,7 @@ class Task(Base):
     # Relationships
     project = relationship("Project", back_populates="tasks")
     assignee = relationship("User", back_populates="assigned_tasks", foreign_keys=[assignee_id])
+    specifications = relationship("Specification", back_populates="task")  # One-to-many: task can have multiple spec versions
+    code_generations = relationship("CodeGeneration", back_populates="task")  # One-to-many: task can have multiple code generations
+    workflow_history = relationship("TaskWorkflowHistory", back_populates="task")
 

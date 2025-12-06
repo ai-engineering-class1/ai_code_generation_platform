@@ -38,6 +38,10 @@ Format the specification in clear Markdown format suitable for a GitHub reposito
 """
         
         try:
+            # Check if API key is configured
+            if not settings.ANTHROPIC_API_KEY:
+                raise ValueError("ANTHROPIC_API_KEY is not configured. Please set it in your .env file.")
+            
             message = self.client.messages.create(
                 model="claude-3-5-sonnet-20241022",
                 max_tokens=4000,
@@ -46,10 +50,16 @@ Format the specification in clear Markdown format suitable for a GitHub reposito
                 ]
             )
             
+            if not message.content or len(message.content) == 0:
+                raise ValueError("Claude API returned empty response")
+            
             return message.content[0].text
+        except ValueError as e:
+            print(f"Configuration error generating specification: {e}")
+            raise  # Re-raise ValueError to be caught by the endpoint
         except Exception as e:
             print(f"Error generating specification: {e}")
-            return ""
+            raise Exception(f"Claude API error: {str(e)}")
     
     async def generate_code(
         self,

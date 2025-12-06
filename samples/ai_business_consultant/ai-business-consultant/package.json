@@ -6,12 +6,14 @@
   "author": " ",
   "private": true,
   "scripts": {
-    "start": "cross-env WDS_SOCKET_PORT=443 npx quasar dev",
+    "start": "cross-env WDS_SOCKET_PORT=443 QUASAR_PORT=9000 npx quasar dev --port 9000 --host localhost",
+    "start:8080": "cross-env WDS_SOCKET_PORT=443 npx quasar dev",
     "lint": "eslint --ext .js,.ts,.vue ./",
     "test": "echo \"No test specified\" && exit 0"
   },
   "dependencies": {
     "@andyet/simplewebrtc": "^1.30.5",
+    "@apollo/client": "^3.8.10",
     "@quasar/extras": "^1.0.0",
     "@vue/apollo-composable": "^4.0.0-alpha.7",
     "@vue/composition-api": "^0.4.0",
@@ -71,6 +73,8 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@babel/plugin-transform-nullish-coalescing-operator": "^7.27.1",
+    "@babel/plugin-transform-optional-chaining": "^7.28.5",
     "@fullhuman/postcss-purgecss": "^2.0.6",
     "@quasar/app": "^2.0.0",
     "@types/color": "^3.0.1",

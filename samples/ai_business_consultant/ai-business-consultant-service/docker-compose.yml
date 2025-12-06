@@ -1,31 +1,52 @@
-version: "3"
 services:
-  pg_db:
-    container_name: pg_db
-    image: "postgres:9.6.17"
+  pg_db_code:
+    container_name: pg_db_code
+    image: "postgres:13"
     restart: always
     environment:
       POSTGRES_USER: jira_user
       POSTGRES_PASSWORD: jira_password
-      POSTGRES_MULTIPLE_DATABASES: jira_db,jira_test_db
+      POSTGRES_MULTIPLE_DATABASES: easiio_ai_consultant,easiio_ai_consultant_test
     ports:
-      - "5432:5432"
+      - "5434:5432"
     volumes:
       - ./scripts:/docker-entrypoint-initdb.d
-      - database-data:/var/lib/postgresql/data/
+      - database2-data:/var/lib/postgresql/data/
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jira_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  pgweb:
-    container_name: pgweb
+  pgweb2:
+    container_name: pgweb_code
     restart: always
     image: sosedoff/pgweb
     ports:
-      - "8081:8081"
+      - "8091:8081"
     links:
-      - pg_db:pg_db
+      - pg_db_code:pg_db_code
     environment:
-      - DATABASE_URL=postgres://jira_user:jira_password@pg_db:5432/jira_db?sslmode=disable
+      - DATABASE_URL=postgres://jira_user:jira_password@pg_db_code:5432/easiio_ai_consultant?sslmode=disable
     depends_on:
-      - pg_db
+      pg_db_code:
+        condition: service_healthy
+    
+  redis2:
+    container_name: redis2
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6381:6379"
+    volumes:
+      - redis2-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
 
 volumes:
-  database-data:
+  database2-data:
+  redis2-data:

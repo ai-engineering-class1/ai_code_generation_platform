@@ -4,9 +4,12 @@ import { InMemoryCache, NormalizedCacheObject } from 'apollo-cache-inmemory';
 import { setContext } from 'apollo-link-context';
 import { getStoredAuthToken } from 'src/utils/authToken';
 
+// Use local GraphQL server for development, or remote for production
+// You can override this by setting VUE_APP_GRAPHQL_URL environment variable
+const GRAPHQL_URL = process.env.VUE_APP_GRAPHQL_URL || 'http://localhost:8050/graphql';
+
 const httpLink = createHttpLink({
-    uri:
-        'https://abc.easiio.com/graphql',
+    uri: GRAPHQL_URL,
 });
 // eslint-disable
 const authLink = setContext((_, { headers }) => {
