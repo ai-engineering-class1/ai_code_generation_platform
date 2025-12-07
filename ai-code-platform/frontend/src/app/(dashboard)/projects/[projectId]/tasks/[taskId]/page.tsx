@@ -4,8 +4,9 @@ import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
-import { ArrowLeft, Clock, User, FileText, GitPullRequest, CheckCircle2, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Clock, User, FileText, GitPullRequest, CheckCircle2, AlertCircle, Bot } from 'lucide-react'
 import apiClient from '@/lib/api'
+import axios from 'axios'
 import { TaskDetail } from '@/types'
 
 export default function TaskDetailPage({
@@ -46,6 +47,24 @@ export default function TaskDetailPage({
     },
     onError: (error: any) => {
       alert(`Failed to generate specification: ${error.response?.data?.detail || error.message}`)
+    },
+  })
+
+  const assignToAgentMutation = useMutation({
+    mutationFn: async () => {
+      const response = await axios.post('http://103.98.213.149:8520/tasks', {
+        taskType: 'feature-implementation',
+        repoUrl: 'https://github.com/DrLinAITeam2/simplest-repo',
+        prompt: 'Please implement the OpenSpec change under openspec/changes',
+        maxTurns: 25
+      })
+      return response.data
+    },
+    onSuccess: (data) => {
+      alert(`Task assigned to agent successfully! Task ID: ${data.taskId || 'assigned'}`)
+    },
+    onError: (error: any) => {
+      alert(`Failed to assign to agent: ${error.response?.data?.detail || error.message}`)
     },
   })
 
@@ -237,10 +256,10 @@ export default function TaskDetailPage({
                   </span>
                 </div>
                 <div>
-  <p className="text-sm text-gray-600 mb-1">Current Stage</p>
-  <span className="inline-block px-2 py-1 bg-blue-100 text-blue-800 text-sm rounded">
-    {task.currentStage?.replace(/_/g, ' ') || 'N/A'}
-  </span>
+                  <p className="text-sm text-gray-600 mb-1">Current Stage</p>
+                  <span className="inline-block px-2 py-1 bg-blue-100 text-blue-800 text-sm rounded">
+                    {task.currentStage?.replace(/_/g, ' ') || 'N/A'}
+                  </span>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600 mb-1">Created</p>
@@ -268,6 +287,14 @@ export default function TaskDetailPage({
                     {generateSpecMutation.isPending ? 'Generating...' : 'Generate Specification'}
                   </button>
                 )}
+                <button
+                  onClick={() => assignToAgentMutation.mutate()}
+                  disabled={assignToAgentMutation.isPending}
+                  className="w-full px-4 py-2 bg-purple-600 text-white text-sm rounded-md hover:bg-purple-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <Bot className="h-4 w-4" />
+                  {assignToAgentMutation.isPending ? 'Assigning...' : 'Assign to intended agent'}
+                </button>
                 {task.specification && task.specification.approved && !task.codeGeneration && (
                   <button className="w-full px-4 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 transition">
                     Generate Code
