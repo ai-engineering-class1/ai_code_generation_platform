@@ -1,4 +1,5 @@
 import anthropic
+import httpx
 from typing import Dict, Any
 from app.core.config import settings
 
@@ -149,4 +150,38 @@ Provide your review in a structured format.
         except Exception as e:
             print(f"Error reviewing code: {e}")
             return {"review": "", "approved": False}
+    
+    async def assign_to_agent(self) -> Dict[str, Any]:
+        """Assign task to remote Claude Web API agent - quick demo"""
+        CLAUDE_WEB_API_URL = "http://103.98.213.149:8520"
+        
+        payload = {
+            "taskType": "feature-implementation",
+            "repoUrl": "https://github.com/DrLinAITeam2/simplest-repo",
+            "prompt": "Please implement the OpenSpec change under openspec/changes",
+            "maxTurns": 25
+        }
+        
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(f"{CLAUDE_WEB_API_URL}/tasks", json=payload)
+                response.raise_for_status()
+                return response.json()
+        except Exception as e:
+            print(f"Error assigning to agent: {e}")
+            raise Exception(f"Failed to assign to agent: {str(e)}")
+    
+    async def get_agent_task(self, task_id: str) -> Dict[str, Any]:
+        """Get task status from remote Claude Web API agent"""
+        CLAUDE_WEB_API_URL = "http://103.98.213.149:8520"
+        
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(f"{CLAUDE_WEB_API_URL}/tasks/{task_id}")
+                response.raise_for_status()
+                return response.json()
+        except Exception as e:
+            print(f"Error getting agent task: {e}")
+            raise Exception(f"Failed to get agent task: {str(e)}")
+
 

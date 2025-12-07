@@ -1,13 +1,39 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
-import { ArrowLeft, Clock, User, FileText, GitPullRequest, CheckCircle2, AlertCircle, Bot } from 'lucide-react'
+import { ArrowLeft, Clock, User, FileText, GitPullRequest, CheckCircle2, AlertCircle, Bot, DollarSign, Timer, Zap } from 'lucide-react'
 import apiClient from '@/lib/api'
-import axios from 'axios'
 import { TaskDetail } from '@/types'
+
+// Agent Task response interface
+interface AgentTaskResult {
+  taskId: string
+  status: string
+  result?: {
+    type?: string
+    subtype?: string  // 'success' or 'error'
+    is_error?: boolean
+    result?: string
+    total_cost_usd?: number
+    duration_ms?: number
+    num_turns?: number
+    modelUsage?: Record<string, {
+      inputTokens: number
+      outputTokens: number
+      costUSD: number
+    }>
+  }
+  executionMetrics?: {
+    durationMs: number
+    numTurns: number
+    totalCostUsd: number
+  }
+  startedAt?: string
+  completedAt?: string
+}
 
 export default function TaskDetailPage({
   params,
@@ -26,12 +52,29 @@ export default function TaskDetailPage({
   }, [router])
 
   const queryClient = useQueryClient()
+  const [agentTaskId, setAgentTaskId] = useState<string | null>(null)
 
   const { data: task, isLoading } = useQuery<TaskDetail>({
     queryKey: ['task', projectId, taskId],
     queryFn: async () => {
       const response = await apiClient.get(`/projects/${projectId}/tasks/${taskId}`)
       return response.data
+    },
+  })
+
+  // Query for agent task status
+  const { data: agentTask, refetch: refetchAgentTask } = useQuery<AgentTaskResult>({
+    queryKey: ['agentTask', agentTaskId],
+    queryFn: async () => {
+      const response = await apiClient.get(`/projects/agent-tasks/${agentTaskId}`)
+      return response.data
+    },
+    enabled: !!agentTaskId,
+    refetchInterval: (query) => {
+      // Poll every 5 seconds if task is still pending/running
+      // Note: Timer starts AFTER previous request completes, so no congestion
+      if (query.state.data?.status === 'completed') return false
+      return 5000
     },
   })
 
@@ -52,15 +95,14 @@ export default function TaskDetailPage({
 
   const assignToAgentMutation = useMutation({
     mutationFn: async () => {
-      const response = await axios.post('http://103.98.213.149:8520/tasks', {
-        taskType: 'feature-implementation',
-        repoUrl: 'https://github.com/DrLinAITeam2/simplest-repo',
-        prompt: 'Please implement the OpenSpec change under openspec/changes',
-        maxTurns: 25
-      })
+      // Call local backend which proxies to remote Claude Web API
+      const response = await apiClient.post('/projects/assign-to-agent')
       return response.data
     },
     onSuccess: (data) => {
+      if (data.taskId) {
+        setAgentTaskId(data.taskId)
+      }
       alert(`Task assigned to agent successfully! Task ID: ${data.taskId || 'assigned'}`)
     },
     onError: (error: any) => {
@@ -233,6 +275,112 @@ export default function TaskDetailPage({
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* Agent Execution Result */}
+            {agentTask && (
+              <div className={`bg-gradient-to-br rounded-lg shadow p-6 border ${agentTask.result?.subtype === 'success' ? 'from-green-50 to-emerald-50 border-green-200' :
+                  agentTask.result?.is_error ? 'from-red-50 to-rose-50 border-red-200' :
+                    'from-purple-50 to-indigo-50 border-purple-200'
+                }`}>
+                <div className="flex items-center gap-2 mb-4 flex-wrap">
+                  <Bot className="h-5 w-5 text-purple-600" />
+                  <h2 className="text-lg font-semibold text-gray-900">Agent Execution Result</h2>
+                  <div className="ml-auto flex items-center gap-2">
+                    {/* Subtype badge (success/error) */}
+                    {agentTask.result?.subtype && (
+                      <span className={`px-3 py-1 text-sm rounded-full font-medium flex items-center gap-1 ${agentTask.result.subtype === 'success' ? 'bg-green-100 text-green-800' :
+                          'bg-red-100 text-red-800'
+                        }`}>
+                        {agentTask.result.subtype === 'success' ? (
+                          <CheckCircle2 className="h-3 w-3" />
+                        ) : (
+                          <AlertCircle className="h-3 w-3" />
+                        )}
+                        {agentTask.result.subtype}
+                      </span>
+                    )}
+                    {/* Status badge */}
+                    <span className={`px-3 py-1 text-sm rounded-full font-medium ${agentTask.status === 'completed' ? 'bg-blue-100 text-blue-800' :
+                        agentTask.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                          agentTask.status === 'running' ? 'bg-blue-100 text-blue-800' :
+                            'bg-gray-100 text-gray-800'
+                      }`}>
+                      {agentTask.status}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Metrics Grid */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                  <div className="bg-white rounded-lg p-3 shadow-sm">
+                    <div className="flex items-center gap-1 text-gray-500 text-xs mb-1">
+                      <DollarSign className="h-3 w-3" />
+                      Total Cost
+                    </div>
+                    <p className="text-lg font-semibold text-gray-900">
+                      ${(agentTask.executionMetrics?.totalCostUsd || agentTask.result?.total_cost_usd || 0).toFixed(4)}
+                    </p>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 shadow-sm">
+                    <div className="flex items-center gap-1 text-gray-500 text-xs mb-1">
+                      <Timer className="h-3 w-3" />
+                      Duration
+                    </div>
+                    <p className="text-lg font-semibold text-gray-900">
+                      {((agentTask.executionMetrics?.durationMs || agentTask.result?.duration_ms || 0) / 1000).toFixed(1)}s
+                    </p>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 shadow-sm">
+                    <div className="flex items-center gap-1 text-gray-500 text-xs mb-1">
+                      <Zap className="h-3 w-3" />
+                      Turns
+                    </div>
+                    <p className="text-lg font-semibold text-gray-900">
+                      {agentTask.executionMetrics?.numTurns || agentTask.result?.num_turns || 0}
+                    </p>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 shadow-sm">
+                    <div className="flex items-center gap-1 text-gray-500 text-xs mb-1">
+                      <Clock className="h-3 w-3" />
+                      Timing
+                    </div>
+                    <p className="text-xs text-gray-700">
+                      {agentTask.startedAt && new Date(agentTask.startedAt).toLocaleTimeString()}
+                      {agentTask.completedAt && ` → ${new Date(agentTask.completedAt).toLocaleTimeString()}`}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Model Usage */}
+                {agentTask.result?.modelUsage && (
+                  <div className="mb-4">
+                    <h3 className="text-sm font-medium text-gray-700 mb-2">Model Usage</h3>
+                    <div className="space-y-2">
+                      {Object.entries(agentTask.result.modelUsage).map(([model, usage]) => (
+                        <div key={model} className="bg-white rounded-lg p-3 shadow-sm">
+                          <p className="text-xs font-mono text-purple-600 mb-1">{model}</p>
+                          <div className="flex gap-4 text-xs text-gray-600">
+                            <span>In: {usage.inputTokens?.toLocaleString() || 0}</span>
+                            <span>Out: {usage.outputTokens?.toLocaleString() || 0}</span>
+                            <span className="text-green-600 font-medium">${usage.costUSD?.toFixed(4) || 0}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Result */}
+                {agentTask.result?.result && (
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-700 mb-2">Result</h3>
+                    <div className="bg-white rounded-lg p-4 shadow-sm max-h-64 overflow-y-auto">
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{agentTask.result.result}</p>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

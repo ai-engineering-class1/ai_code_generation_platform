@@ -11,6 +11,7 @@ from app.schemas.task import (
     TaskCreate, TaskUpdate, TaskResponse, 
     TaskDetailResponse, SpecificationCreate, SpecificationResponse
 )
+from app.services.claude_service import ClaudeService
 
 router = APIRouter()
 
@@ -304,3 +305,37 @@ async def approve_specification(
     db.refresh(spec)
     
     return spec
+
+
+@router.post("/assign-to-agent")
+async def assign_to_agent(
+    current_user: User = Depends(get_current_active_user)
+):
+    """Assign task to remote Claude Web API agent - quick demo"""
+    try:
+        claude_service = ClaudeService()
+        result = await claude_service.assign_to_agent()
+        return result
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.get("/agent-tasks/{agent_task_id}")
+async def get_agent_task(
+    agent_task_id: str,
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get task status from remote Claude Web API agent"""
+    try:
+        claude_service = ClaudeService()
+        result = await claude_service.get_agent_task(agent_task_id)
+        return result
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
