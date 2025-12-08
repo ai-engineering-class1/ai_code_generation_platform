@@ -158,34 +158,73 @@ async def sync_jira_issues(
     return {"message": "Sync started", "project_id": project_id}
 
 
+@router.get("/webhook")
+@router.head("/webhook")
 @router.post("/webhook")
 async def jira_webhook(
     request: Request,
     db: Session = Depends(get_db)
 ):
     """Handle Jira webhooks"""
+    # Handle HEAD/GET requests for webhook validation (Jira sends these to verify the endpoint)
+    if request.method in ["GET", "HEAD"]:
+        print("✅ Jira webhook validation request received (HEAD/GET)")
+        return {"status": "ok", "message": "Webhook endpoint is active"}
+    
+    print("=" * 60)
+    print("🔔 JIRA WEBHOOK RECEIVED")
+    print("=" * 60)
+    
     try:
         # Get payload
         payload = await request.json()
         event_type = payload.get("webhookEvent")
         
+        print(f"📥 Event Type: {event_type}")
+        print(f"📦 Payload keys: {list(payload.keys())}")
+        
+        # Log issue details if available
+        issue = payload.get("issue", {})
+        if issue:
+            issue_key = issue.get("key", "Unknown")
+            fields = issue.get("fields", {})
+            summary = fields.get("summary", "No summary")
+            print(f"📋 Issue Key: {issue_key}")
+            print(f"📝 Summary: {summary}")
+        
         # Handle different event types
         if event_type == "jira:issue_created":
+            print("✅ Processing issue_created event...")
             await handle_issue_created(payload, db)
+            print("✅ Issue created handler completed")
         elif event_type == "jira:issue_updated":
+            print("✅ Processing issue_updated event...")
             await handle_issue_updated(payload, db)
+            print("✅ Issue updated handler completed")
         elif event_type == "jira:issue_deleted":
+            print("✅ Processing issue_deleted event...")
             await handle_issue_deleted(payload, db)
+            print("✅ Issue deleted handler completed")
+        else:
+            print(f"⚠️ Unknown event type: {event_type}")
+        
+        print("=" * 60)
+        print("✅ WEBHOOK PROCESSED SUCCESSFULLY")
+        print("=" * 60)
         
         return {
             "message": "Webhook processed",
             "event_type": event_type
         }
     except Exception as e:
-        print(f"Error processing Jira webhook: {e}")
+        print("=" * 60)
+        print(f"❌ ERROR PROCESSING JIRA WEBHOOK: {e}")
+        print("=" * 60)
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error processing webhook"
+            detail=f"Error processing webhook: {str(e)}"
         )
 
 
@@ -195,15 +234,29 @@ async def handle_issue_created(payload: dict, db: Session):
     issue_key = issue.get("key")
     fields = issue.get("fields", {})
     
+    if not issue_key:
+        print("❌ No issue key found in payload")
+        return
+    
+    print(f"🔍 Processing issue creation: {issue_key}")
+    
     # Find project by Jira project key
     project_key = issue_key.split('-')[0]
+    print(f"🔍 Looking for Jira project key: {project_key}")
+    
     config = db.query(JiraConfiguration).filter(
         JiraConfiguration.jira_project_key == project_key
     ).first()
     
     if not config:
-        print(f"No configuration found for Jira project {project_key}")
+        print(f"❌ No configuration found for Jira project {project_key}")
+        print(f"   Available configurations:")
+        all_configs = db.query(JiraConfiguration).all()
+        for c in all_configs:
+            print(f"   - Project ID: {c.project_id}, Jira Key: {c.jira_project_key}")
         return
+    
+    print(f"✅ Found configuration for project: {config.project_id}")
     
     # Check if task already exists
     existing_task = db.query(Task).filter(
@@ -211,7 +264,7 @@ async def handle_issue_created(payload: dict, db: Session):
     ).first()
     
     if existing_task:
-        print(f"Task already exists for issue {issue_key}")
+        print(f"⚠️ Task already exists for issue {issue_key} (Task ID: {existing_task.id})")
         return
     
     # Parse Jira data
@@ -219,12 +272,21 @@ async def handle_issue_created(payload: dict, db: Session):
     task_type = jira_service.parse_issue_type(issue)
     priority = jira_service.parse_priority(issue)
     
+    summary = fields.get("summary", "")
+    description = fields.get("description", "")
+    
+    print(f"📝 Creating task:")
+    print(f"   - Title: {summary}")
+    print(f"   - Type: {task_type}")
+    print(f"   - Priority: {priority}")
+    print(f"   - Project ID: {config.project_id}")
+    
     # Create new task
     new_task = Task(
         project_id=config.project_id,
         jira_issue_key=issue_key,
-        title=fields.get("summary", ""),
-        description=fields.get("description", ""),
+        title=summary,
+        description=description if isinstance(description, str) else str(description),
         type=task_type,
         priority=priority,
         status=TaskStatus.PENDING,
@@ -233,7 +295,11 @@ async def handle_issue_created(payload: dict, db: Session):
     
     db.add(new_task)
     db.commit()
-    print(f"Created task for Jira issue {issue_key}")
+    db.refresh(new_task)
+    
+    print(f"✅ Successfully created task for Jira issue {issue_key}")
+    print(f"   - Task ID: {new_task.id}")
+    print(f"   - Project ID: {new_task.project_id}")
 
 
 async def handle_issue_updated(payload: dict, db: Session):
@@ -243,28 +309,53 @@ async def handle_issue_updated(payload: dict, db: Session):
     fields = issue.get("fields", {})
     changelog = payload.get("changelog", {})
     
+    if not issue_key:
+        print("❌ No issue key found in payload")
+        return
+    
+    print(f"🔍 Processing issue update: {issue_key}")
+    
     # Find existing task
     task = db.query(Task).filter(
         Task.jira_issue_key == issue_key
     ).first()
     
     if not task:
-        print(f"No task found for Jira issue {issue_key}")
+        print(f"⚠️ No task found for Jira issue {issue_key}")
+        print(f"   This might be a new issue - consider creating it first")
         return
     
+    print(f"✅ Found existing task: {task.id}")
+    
     # Update task fields
-    task.title = fields.get("summary", task.title)
-    task.description = fields.get("description", task.description)
+    old_title = task.title
+    new_title = fields.get("summary", task.title)
+    new_description = fields.get("description", task.description)
+    
+    if isinstance(new_description, dict):
+        # Handle ADF format description
+        new_description = str(new_description)
+    
+    task.title = new_title
+    task.description = new_description if new_description else task.description
     task.updated_at = datetime.utcnow()
     
     db.commit()
-    print(f"Updated task for Jira issue {issue_key}")
+    print(f"✅ Updated task for Jira issue {issue_key}")
+    if old_title != new_title:
+        print(f"   - Title changed: '{old_title}' → '{new_title}'")
 
 
 async def handle_issue_deleted(payload: dict, db: Session):
     """Handle Jira issue deleted event"""
     issue = payload.get("issue", {})
     issue_key = issue.get("key")
+    
+    if not issue_key:
+        print("❌ No issue key found in payload")
+        return
+    
+    print(f"🔍 Processing issue deletion: {issue_key}")
     
     # Find and delete task
     task = db.query(Task).filter(
@@ -276,4 +367,8 @@ async def handle_issue_deleted(payload: dict, db: Session):
         task.status = TaskStatus.CANCELLED
         task.updated_at = datetime.utcnow()
         db.commit()
-        print(f"Cancelled task for deleted Jira issue {issue_key}")
+        print(f"✅ Cancelled task for deleted Jira issue {issue_key}")
+        print(f"   - Task ID: {task.id}")
+        print(f"   - Status set to: CANCELLED")
+    else:
+        print(f"⚠️ No task found for Jira issue {issue_key} (nothing to cancel)")

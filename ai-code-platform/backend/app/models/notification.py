@@ -40,7 +40,7 @@ class TaskWorkflowHistory(Base):
     from_stage = Column(String(50))
     to_stage = Column(String(50))
     status = Column(String(50))
-    workflow_metadata = Column("metadata", JSON)  # Column name in DB is 'metadata', but attribute is 'workflow_metadata' to avoid SQLAlchemy conflict
+    workflow_metadata = Column("workflow_metadata", JSON)  # Column name matches database
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Relationships

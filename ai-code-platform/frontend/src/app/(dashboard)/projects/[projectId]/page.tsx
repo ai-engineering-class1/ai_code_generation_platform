@@ -8,6 +8,7 @@ import { ArrowLeft, Settings, Plus, Activity, CheckCircle2, CalendarDays, Clock9
 import apiClient from '@/lib/api'
 import { Project, Task, ProjectProgress, JiraConfiguration, GitHubConfiguration } from '@/types'
 import UserMenu from '@/components/UserMenu'
+import NotificationBell from '@/components/NotificationBell'
 
 export default function ProjectDetailPage({ params }: { params: { projectId: string } }) {
   const router = useRouter()
@@ -35,6 +36,7 @@ export default function ProjectDetailPage({ params }: { params: { projectId: str
       const response = await apiClient.get(`/projects/${projectId}/tasks`)
       return response.data
     },
+    refetchInterval: 5000, // Auto-refresh every 5 seconds to catch new Jira tasks
   })
 
   const { data: jiraConfig } = useQuery<JiraConfiguration>({
@@ -214,6 +216,7 @@ export default function ProjectDetailPage({ params }: { params: { projectId: str
                 <Settings className="h-5 w-5 mr-2" />
                 Settings
               </Link>
+              <NotificationBell />
               <UserMenu />
             </div>
           </div>
@@ -442,11 +445,51 @@ function TaskCard({ task, projectId, jiraConfig }: { task: Task; projectId: stri
   const jiraIssueUrl = task.jiraIssueKey && jiraConfig ? getJiraIssueUrl(task.jiraIssueKey, jiraConfig) : null
   const cardHref = jiraIssueUrl || `/projects/${projectId}/tasks/${task.id}`
 
+  // Use regular anchor for Jira (external), Link for internal tasks
+  if (jiraIssueUrl) {
+    return (
+      <a
+        href={cardHref}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block border border-gray-200 rounded-lg p-4 hover:border-blue-500 hover:shadow-md transition"
+      >
+        <div className="flex items-start justify-between mb-2">
+          <div className="flex-1">
+            <div className="flex items-center space-x-2 mb-1">
+              <h3 className="font-semibold text-gray-900">
+                {task.title}
+              </h3>
+              {task.jiraIssueKey && (
+                <span className="text-xs text-blue-600 font-medium">
+                  ({task.jiraIssueKey})
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-gray-600 line-clamp-2">{task.description}</p>
+          </div>
+          <div className="flex items-center space-x-2 ml-4">
+            <div className="flex flex-col items-end space-y-2">
+              <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(task.status)}`}>
+                {task.status}
+              </span>
+              <span className={`px-2 py-1 text-xs rounded-full ${getPriorityColor(task.priority)}`}>
+                {task.priority}
+              </span>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center justify-between text-xs text-gray-500">
+          <span>{task.type}</span>
+          <span>{task.currentStage?.replace(/_/g, ' ') || 'N/A'}</span>
+        </div>
+      </a>
+    )
+  }
+
   return (
-    <a
+    <Link
       href={cardHref}
-      target={jiraIssueUrl ? '_blank' : '_self'}
-      rel={jiraIssueUrl ? 'noopener noreferrer' : undefined}
       className="block border border-gray-200 rounded-lg p-4 hover:border-blue-500 hover:shadow-md transition"
     >
       <div className="flex items-start justify-between mb-2">
@@ -478,7 +521,7 @@ function TaskCard({ task, projectId, jiraConfig }: { task: Task; projectId: stri
         <span>{task.type}</span>
         <span>{task.currentStage?.replace(/_/g, ' ') || 'N/A'}</span>
       </div>
-    </a>
+    </Link>
   )
 }
 

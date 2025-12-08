@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query'
 import apiClient from '@/lib/api'
 import { Project, Task } from '@/types'
 import UserMenu from '@/components/UserMenu'
+import NotificationBell from '@/components/NotificationBell'
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -42,6 +43,7 @@ export default function DashboardPage() {
               <Plus className="h-5 w-5 mr-2" />
               New Project
             </Link>
+            <NotificationBell />
             <UserMenu />
           </div>
         </div>
