@@ -29,4 +29,5 @@ class Project(Base):
     # Relationships
     owner = relationship("User", back_populates="owned_projects", foreign_keys=[owner_id])
     tasks = relationship("Task", back_populates="project", cascade="all, delete-orphan")
+    notifications = relationship("Notification", back_populates="project")
 

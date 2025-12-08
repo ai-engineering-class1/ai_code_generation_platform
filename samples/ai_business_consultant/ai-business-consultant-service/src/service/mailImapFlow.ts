@@ -36,7 +36,26 @@ import { Like } from "typeorm";
 
 import redis from "ioredis";
 
-const redisClient = new redis(process.env.REDIS_URL);
+const redisClient = process.env.REDIS_URL && process.env.REDIS_URL.trim() !== ''
+  ? new redis(process.env.REDIS_URL, {
+      retryStrategy: (times) => Math.min(times * 50, 2000),
+      maxRetriesPerRequest: 3,
+      lazyConnect: true,
+    })
+  : null;
+
+// Add error handlers if client exists
+if (redisClient) {
+  redisClient.on('error', (err) => {
+    console.error('[Redis] Error in mailImapFlow:', err.message);
+  });
+  redisClient.on('connect', () => {
+    console.log('[Redis] mailImapFlow: Connecting...');
+  });
+  redisClient.on('ready', () => {
+    console.log('[Redis] mailImapFlow: Connection ready');
+  });
+}
 
 const cretaeCustomerIdentificationFailed = async (
   failedReason: string,
@@ -335,10 +354,23 @@ export const imapFlowStartListenActive = async (model: MailListen) => {
       // console.log(msg);
       // console.log(JSON.stringify(msg.envelope));
       const parsed = await simpleParser(msg.source, { skipAttachments: true });
-      let messageId = await redisClient.get(`messageId:${parsed.messageId}`);
+      let messageId: string | null = null;
+      if (redisClient) {
+        try {
+          messageId = await redisClient.get(`messageId:${parsed.messageId}`);
+        } catch (err) {
+          console.warn('[Redis] Failed to get messageId:', err);
+        }
+      }
       if (!messageId) {
         messages.push(parsed);
-        redisClient.set(`messageId:${parsed.messageId}`, 1, "EX", 48 * 60 * 60);
+        if (redisClient) {
+          try {
+            redisClient.set(`messageId:${parsed.messageId}`, 1, "EX", 48 * 60 * 60);
+          } catch (err) {
+            console.warn('[Redis] Failed to set messageId:', err);
+          }
+        }
       }
     }
 
@@ -1054,17 +1086,30 @@ export const imapFlowImportSentMessagesBoxActive = async (model: any) => {
       const parsed = await simpleParser(message.source, {
         skipAttachments: true,
       });
-      let messageId = await redisClient.get(
-        `send_messageId:${parsed.messageId}`
-      );
+      let messageId: string | null = null;
+      if (redisClient) {
+        try {
+          messageId = await redisClient.get(
+            `send_messageId:${parsed.messageId}`
+          );
+        } catch (err) {
+          console.warn('[Redis] Failed to get send_messageId:', err);
+        }
+      }
       if (!messageId) {
         messagesArr.push(parsed);
-        redisClient.set(
-          `send_messageId:${parsed.messageId}`,
-          1,
-          "EX",
-          48 * 60 * 60
-        );
+        if (redisClient) {
+          try {
+            redisClient.set(
+              `send_messageId:${parsed.messageId}`,
+              1,
+              "EX",
+              48 * 60 * 60
+            );
+          } catch (err) {
+            console.warn('[Redis] Failed to set send_messageId:', err);
+          }
+        }
       }
     }
 

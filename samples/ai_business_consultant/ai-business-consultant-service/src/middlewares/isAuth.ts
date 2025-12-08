@@ -5,12 +5,38 @@ import { MiddlewareFn } from "type-graphql";
 import { GQLContext } from "types/context";
 import redis from "ioredis";
 
-const client = new redis(process.env.REDIS_URL);
+const client = process.env.REDIS_URL && process.env.REDIS_URL.trim() !== '' 
+  ? new redis(process.env.REDIS_URL, {
+      retryStrategy: (times) => Math.min(times * 50, 2000),
+      maxRetriesPerRequest: 3,
+      lazyConnect: true,
+    })
+  : null;
+
+// Add error handlers if client exists
+if (client) {
+  client.on('error', (err) => {
+    console.error('[Redis] Error in isAuth middleware:', err.message);
+  });
+  client.on('connect', () => {
+    console.log('[Redis] isAuth middleware: Connecting...');
+  });
+  client.on('ready', () => {
+    console.log('[Redis] isAuth middleware: Connection ready');
+  });
+}
 const getUser = async (userId: string): Promise<User> => {
   // const userId = "128cc467-9709-4883-81e5-fd1b0516a7e2";
-  client.select(0);
-  let userStr = await client.get(`user_id_${userId}`);
-  // client.del(`user_id_${userId}`);
+  let userStr: string | null = null;
+  if (client) {
+    try {
+      client.select(0);
+      userStr = await client.get(`user_id_${userId}`);
+      // client.del(`user_id_${userId}`);
+    } catch (err) {
+      console.warn('[Redis] Failed to get user from cache:', err);
+    }
+  }
   if (userStr) {
     // console.log("get user from redis");
     const user = JSON.parse(userStr);
@@ -47,7 +73,13 @@ const getUser = async (userId: string): Promise<User> => {
       );
     }
     const userStr = JSON.stringify(user);
-    client.set(`user_id_${userId}`, userStr, "EX", 7200);
+    if (client) {
+      try {
+        client.set(`user_id_${userId}`, userStr, "EX", 7200);
+      } catch (err) {
+        console.warn('[Redis] Failed to cache user:', err);
+      }
+    }
     return user;
   }
 };

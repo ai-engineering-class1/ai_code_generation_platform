@@ -118,17 +118,32 @@ async def generate_specification(
         )
     
     # Generate specification using Claude
-    claude_service = ClaudeService()
-    spec_content = await claude_service.generate_specification(
-        task.title,
-        task.description or "",
-        task.type.value
-    )
-    
-    if not spec_content:
+    try:
+        claude_service = ClaudeService()
+        # Handle task.type - it might be an enum or a string
+        task_type = task.type.value if hasattr(task.type, 'value') else str(task.type)
+        spec_content = await claude_service.generate_specification(
+            task.title,
+            task.description or "",
+            task_type
+        )
+        
+        if not spec_content:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to generate specification: Claude API returned empty response"
+            )
+    except ValueError as e:
+        # Configuration error (e.g., missing API key)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to generate specification"
+            detail=f"Configuration error: {str(e)}"
+        )
+    except Exception as e:
+        # Other errors from Claude service
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate specification: {str(e)}"
         )
     
     # Create specification

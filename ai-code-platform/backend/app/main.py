@@ -4,6 +4,14 @@ from app.core.config import settings
 from app.api.v1.api import api_router
 from app.core.database import Base, engine
 
+# Import all models to ensure relationships are properly configured
+# This ensures SQLAlchemy can resolve string references in relationships
+from app.models import user, project, task, integration, workflow, notification
+from app.models.user import User  # Explicitly import User for Task relationship
+from app.models.project import Project  # Explicitly import Project for Task relationship
+from app.models.notification import TaskWorkflowHistory  # Explicitly import for relationship resolution
+from app.models.workflow import Specification, CodeGeneration  # Explicitly import for relationship resolution
+
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
@@ -13,13 +21,19 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_PREFIX}/openapi.json"
 )
 
-# Configure CORS (allow everything per user request)
+# Configure CORS - Allow frontend origin
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
+    allow_origins=[
+        "http://localhost:3012",
+        "http://localhost:3000",
+        "http://127.0.0.1:3012",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Include API router

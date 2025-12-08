@@ -24,7 +24,7 @@
 
     <Modal v-if="isCommentDeleteOpen"
            @confirm="confirmCommentDelete"
-           @close="isCommentDeleteOpen = false"
+           @close="() => { console.log('Modal close event received'); isCommentDeleteOpen = false; }"
            :width="600"
            :component="Confirm"
            :componentProps="commentDeleteProps" />

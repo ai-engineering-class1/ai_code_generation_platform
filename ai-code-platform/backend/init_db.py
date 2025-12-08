@@ -9,6 +9,7 @@ from app.models.user import User, UserRole
 from app.models.project import Project, ProjectStatus
 from app.models.task import Task, TaskType, TaskPriority, TaskStatus, TaskStage
 from app.models.integration import JiraConfiguration, GitHubConfiguration
+from app.models.notification import Notification, TaskWorkflowHistory, AuditLog  # Required for relationship resolution
 import uuid
 
 

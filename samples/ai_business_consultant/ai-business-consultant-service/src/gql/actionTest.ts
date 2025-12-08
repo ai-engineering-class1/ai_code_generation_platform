@@ -56,7 +56,26 @@ import {
 } from "@/utils/dateTime";
 import { ResolveTime } from "@/middlewares";
 
-const client = new redis(process.env.REDIS_URL);
+const client = process.env.REDIS_URL && process.env.REDIS_URL.trim() !== ''
+  ? new redis(process.env.REDIS_URL, {
+      retryStrategy: (times) => Math.min(times * 50, 2000),
+      maxRetriesPerRequest: 3,
+      lazyConnect: true,
+    })
+  : null;
+
+// Add error handlers if client exists
+if (client) {
+  client.on('error', (err) => {
+    console.error('[Redis] Error in actionTest:', err.message);
+  });
+  client.on('connect', () => {
+    console.log('[Redis] actionTest: Connecting...');
+  });
+  client.on('ready', () => {
+    console.log('[Redis] actionTest: Connection ready');
+  });
+}
 
 function createRandomNumber(len: number) {
   let data = "1234567890"; //"ABCDEFGHJKMNPQRSTWXYZabcdefhijkmnprstwxyz2345678";
@@ -78,10 +97,17 @@ class ActionTestResolver {
     // const value = await client.get("key");
     // console.log(value);
     // await client.disconnect();
-    const client = new redis(process.env.REDIS_URL);
-    await client.set("key", "value", "EX", 3600);
-    const v = await client.get("key");
-    console.log(v);
+    if (client) {
+      try {
+        await client.set("key", "value", "EX", 3600);
+        const v = await client.get("key");
+        console.log(v);
+      } catch (err) {
+        console.warn('[Redis] Failed to test Redis:', err);
+      }
+    } else {
+      console.warn('[Redis] Redis client not available');
+    }
     return "guest"; //signToken({ sub: user.id });
   }
 
@@ -1523,8 +1549,15 @@ class ActionTestResolver {
   @Mutation(() => User)
   async actionTest41(): Promise<User> {
     const userId = "128cc467-9709-4883-81e5-fd1b0516a7e2";
-    client.select(0);
-    let userStr = await client.get(`user_id_${userId}`);
+    let userStr: string | null = null;
+    if (client) {
+      try {
+        client.select(0);
+        userStr = await client.get(`user_id_${userId}`);
+      } catch (err) {
+        console.warn('[Redis] Failed to get user from cache:', err);
+      }
+    }
     if (userStr) {
       console.log("get user from redis");
       const user = JSON.parse(userStr);
@@ -1554,7 +1587,13 @@ class ActionTestResolver {
         throw new CommonError("User not found");
       }
       const userStr = JSON.stringify(user);
-      client.set(`user_id_${userId}`, userStr, "EX", 3600);
+      if (client) {
+        try {
+          client.set(`user_id_${userId}`, userStr, "EX", 3600);
+        } catch (err) {
+          console.warn('[Redis] Failed to cache user:', err);
+        }
+      }
       return user;
     }
   }

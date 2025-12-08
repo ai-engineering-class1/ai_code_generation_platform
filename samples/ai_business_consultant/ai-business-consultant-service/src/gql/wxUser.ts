@@ -38,7 +38,26 @@ import { getAccessToken } from "@/utils/common";
 import redis from "ioredis";
 import { sendSmsCode } from "@/utils/aliyunSMS";
 
-const client = new redis(process.env.REDIS_URL);
+const client = process.env.REDIS_URL && process.env.REDIS_URL.trim() !== ''
+  ? new redis(process.env.REDIS_URL, {
+      retryStrategy: (times) => Math.min(times * 50, 2000),
+      maxRetriesPerRequest: 3,
+      lazyConnect: true,
+    })
+  : null;
+
+// Add error handlers if client exists
+if (client) {
+  client.on('error', (err) => {
+    console.error('[Redis] Error in wxUser:', err.message);
+  });
+  client.on('connect', () => {
+    console.log('[Redis] wxUser: Connecting...');
+  });
+  client.on('ready', () => {
+    console.log('[Redis] wxUser: Connection ready');
+  });
+}
 @Resolver()
 class WxUserResolver {
   @UseMiddleware([ErrorInterceptor, ResolveTime])
@@ -472,7 +491,14 @@ class WxUserResolver {
     @Arg("code", () => String, { nullable: true }) code: string
   ): Promise<Boolean> {
     if (isNonEmptyString(code)) {
-      const existCode = await client.get(phoneNumber);
+      let existCode: string | null = null;
+      if (client) {
+        try {
+          existCode = await client.get(phoneNumber);
+        } catch (err) {
+          console.warn('[Redis] Failed to get code:', err);
+        }
+      }
       if (existCode == null) {
         throw new CommonError("Code not found");
       }
@@ -518,7 +544,14 @@ class WxUserResolver {
     @Arg("phoneNumber", () => String) phoneNumber: string,
     @Arg("code", () => String) code: string
   ): Promise<Boolean> {
-    const existCode = await client.get(phoneNumber);
+    let existCode: string | null = null;
+    if (client) {
+      try {
+        existCode = await client.get(phoneNumber);
+      } catch (err) {
+        console.warn('[Redis] Failed to get code:', err);
+      }
+    }
     if (existCode == null) {
       throw new CommonError("Code not found");
     }
@@ -575,7 +608,14 @@ class WxUserResolver {
     @Arg("openid", () => String) openid: string,
     @Arg("phoneNumber", () => String) phoneNumber: string
   ): Promise<Boolean> {
-    const existCode = await client.get(phoneNumber);
+    let existCode: string | null = null;
+    if (client) {
+      try {
+        existCode = await client.get(phoneNumber);
+      } catch (err) {
+        console.warn('[Redis] Failed to get code:', err);
+      }
+    }
     if (existCode != null) {
       return false;
     }
@@ -589,7 +629,13 @@ class WxUserResolver {
     }
 
     const newCode = await createRandomNumber(6);
-    await client.set(phoneNumber, newCode, "EX", 70);
+    if (client) {
+      try {
+        await client.set(phoneNumber, newCode, "EX", 70);
+      } catch (err) {
+        console.warn('[Redis] Failed to set code:', err);
+      }
+    }
     const result = await sendSmsCode(phoneNumber, newCode);
     console.log(result);
     return true;
@@ -610,12 +656,25 @@ class WxUserResolver {
       throw new CommonError("User not found");
     }
     if (wxUser.phoneNumber == null || wxUser.phoneNumber == "") {
-      const existCode = await client.get(phoneNumber);
+      let existCode: string | null = null;
+      if (client) {
+        try {
+          existCode = await client.get(phoneNumber);
+        } catch (err) {
+          console.warn('[Redis] Failed to get code:', err);
+        }
+      }
       if (existCode != null) {
         return existCode;
       }
       const newCode = await createRandomNumber(6);
-      await client.set(phoneNumber, newCode, "EX", 70);
+      if (client) {
+        try {
+          await client.set(phoneNumber, newCode, "EX", 70);
+        } catch (err) {
+          console.warn('[Redis] Failed to set code:', err);
+        }
+      }
       // const result = await sendSmsCode(phoneNumber, newCode);
       // console.log(result);
       return newCode;

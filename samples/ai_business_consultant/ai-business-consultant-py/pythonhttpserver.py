@@ -3,6 +3,15 @@ from pathlib import Path
 import importlib.util
 import sys
 import inspect
+import os
+
+# Ensure virtual environment's site-packages are in the path
+# This helps when the script is run without explicitly activating the venv
+venv_path = Path(__file__).parent / 'venv'
+if venv_path.exists():
+    site_packages = venv_path / 'Lib' / 'site-packages'
+    if site_packages.exists() and str(site_packages) not in sys.path:
+        sys.path.insert(0, str(site_packages))
 
 app = FastAPI()
 

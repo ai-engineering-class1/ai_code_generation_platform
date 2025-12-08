@@ -1,21 +1,46 @@
 import { CommonError } from "@/errors";
 const SMSClient = require("@alicloud/sms-sdk");
 
-const config = JSON.parse(process.env.ALICLOUD_SMS_CONFIG);
+// Lazy initialization to avoid errors when config is empty
+let config: any = null;
+let pushPaperworkConfig: any = null;
+let smsClient: any = null;
 
-const pushPaperworkConfig = JSON.parse(
-  process.env.ALICLOUD_PUSH_PAPERWORK_SMS_CONFIG
-);
+const getConfig = () => {
+  if (!config) {
+    const configStr = process.env.ALICLOUD_SMS_CONFIG;
+    if (!configStr || configStr === 'undefined' || configStr.trim() === '') {
+      throw new CommonError('ALICLOUD_SMS_CONFIG is not configured');
+    }
+    config = JSON.parse(configStr);
+  }
+  return config;
+};
 
-// 阿里云 AccessKey 信息
-const accessKeyId = config.AccessKeyId;
-const accessKeySecret = config.AccessKeySecret;
+const getPushPaperworkConfig = () => {
+  if (!pushPaperworkConfig) {
+    const configStr = process.env.ALICLOUD_PUSH_PAPERWORK_SMS_CONFIG;
+    if (!configStr || configStr === 'undefined' || configStr.trim() === '') {
+      throw new CommonError('ALICLOUD_PUSH_PAPERWORK_SMS_CONFIG is not configured');
+    }
+    pushPaperworkConfig = JSON.parse(configStr);
+  }
+  return pushPaperworkConfig;
+};
 
-// 初始化短信客户端
-const smsClient = new SMSClient({
-  accessKeyId: accessKeyId,
-  secretAccessKey: accessKeySecret,
-});
+const getSmsClient = () => {
+  if (!smsClient) {
+    const cfg = getConfig();
+    if (!cfg.AccessKeyId || cfg.AccessKeyId === '') {
+      throw new CommonError('SMS AccessKeyId is required');
+    }
+    smsClient = new SMSClient({
+      accessKeyId: cfg.AccessKeyId,
+      secretAccessKey: cfg.AccessKeySecret,
+    });
+  }
+  return smsClient;
+};
 
 /**
  * 发送短信验证码
@@ -24,14 +49,16 @@ const smsClient = new SMSClient({
  */
 export const sendSmsCode = async (phoneNumber: string, code: string) => {
   try {
+    const cfg = getConfig();
+    const client = getSmsClient();
     const input = {
       PhoneNumbers: phoneNumber, // 接收短信的手机号码
-      SignName: config.SignName, // 短信签名（需在阿里云控制台配置）
-      TemplateCode: config.TemplateCode, // 模板CODE（需在阿里云控制台创建模板）
+      SignName: cfg.SignName, // 短信签名（需在阿里云控制台配置）
+      TemplateCode: cfg.TemplateCode, // 模板CODE（需在阿里云控制台创建模板）
       TemplateParam: JSON.stringify({ code: code }), // 短信模板参数
     };
     console.log(input);
-    const result = await smsClient.sendSMS(input);
+    const result = await client.sendSMS(input);
 
     if (result.Code === "OK") {
       console.log("短信发送成功:", result);
@@ -52,10 +79,12 @@ export const sendSmsPaperWork = async (
   taskid: string
 ) => {
   try {
+    const cfg = getPushPaperworkConfig();
+    const client = getSmsClient();
     const input = {
       PhoneNumbers: phoneNumber, // 接收短信的手机号码
-      SignName: pushPaperworkConfig.SignName, // 短信签名（需在阿里云控制台配置）
-      TemplateCode: pushPaperworkConfig.TemplateCode, // 模板CODE（需在阿里云控制台创建模板）
+      SignName: cfg.SignName, // 短信签名（需在阿里云控制台配置）
+      TemplateCode: cfg.TemplateCode, // 模板CODE（需在阿里云控制台创建模板）
       TemplateParam: JSON.stringify({
         spname: productName,
         taskid: taskid,
@@ -63,7 +92,7 @@ export const sendSmsPaperWork = async (
       }), // 短信模板参数
     };
     console.log(input);
-    const result = await smsClient.sendSMS(input);
+    const result = await client.sendSMS(input);
 
     if (result.Code === "OK") {
       console.log("短信发送成功:", result);

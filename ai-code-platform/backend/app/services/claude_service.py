@@ -1,4 +1,5 @@
 import anthropic
+import httpx
 from typing import Dict, Any
 from app.core.config import settings
 
@@ -38,6 +39,10 @@ Format the specification in clear Markdown format suitable for a GitHub reposito
 """
         
         try:
+            # Check if API key is configured
+            if not settings.ANTHROPIC_API_KEY:
+                raise ValueError("ANTHROPIC_API_KEY is not configured. Please set it in your .env file.")
+            
             message = self.client.messages.create(
                 model="claude-3-5-sonnet-20241022",
                 max_tokens=4000,
@@ -46,10 +51,16 @@ Format the specification in clear Markdown format suitable for a GitHub reposito
                 ]
             )
             
+            if not message.content or len(message.content) == 0:
+                raise ValueError("Claude API returned empty response")
+            
             return message.content[0].text
+        except ValueError as e:
+            print(f"Configuration error generating specification: {e}")
+            raise  # Re-raise ValueError to be caught by the endpoint
         except Exception as e:
             print(f"Error generating specification: {e}")
-            return ""
+            raise Exception(f"Claude API error: {str(e)}")
     
     async def generate_code(
         self,
@@ -139,4 +150,38 @@ Provide your review in a structured format.
         except Exception as e:
             print(f"Error reviewing code: {e}")
             return {"review": "", "approved": False}
+    
+    async def assign_to_agent(self) -> Dict[str, Any]:
+        """Assign task to remote Claude Web API agent - quick demo"""
+        CLAUDE_WEB_API_URL = "http://103.98.213.149:8520"
+        
+        payload = {
+            "taskType": "feature-implementation",
+            "repoUrl": "https://github.com/DrLinAITeam2/simplest-repo",
+            "prompt": "Please implement the OpenSpec change under openspec/changes",
+            "maxTurns": 25
+        }
+        
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(f"{CLAUDE_WEB_API_URL}/tasks", json=payload)
+                response.raise_for_status()
+                return response.json()
+        except Exception as e:
+            print(f"Error assigning to agent: {e}")
+            raise Exception(f"Failed to assign to agent: {str(e)}")
+    
+    async def get_agent_task(self, task_id: str) -> Dict[str, Any]:
+        """Get task status from remote Claude Web API agent"""
+        CLAUDE_WEB_API_URL = "http://103.98.213.149:8520"
+        
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(f"{CLAUDE_WEB_API_URL}/tasks/{task_id}")
+                response.raise_for_status()
+                return response.json()
+        except Exception as e:
+            print(f"Error getting agent task: {e}")
+            raise Exception(f"Failed to get agent task: {str(e)}")
+
 

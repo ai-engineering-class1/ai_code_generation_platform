@@ -13,5 +13,10 @@ else
     exit 1
 fi
 
+# Update database schema (add any missing columns)
+echo "Updating database schema..."
+python update_db_schema.py
+echo ""
+
 # Start server
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8082

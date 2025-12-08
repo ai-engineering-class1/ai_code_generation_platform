@@ -7,7 +7,9 @@
     "email": "keefe.lin@easiio.com"
   },
   "scripts": {
-    "dev": "ts-node-dev --respawn --files --transpile-only --no-notify --ignore-watch node_modules src/index.ts",
+    "_dev_old": "ts-node-dev --respawn --files --transpile-only --no-notify --ignore-watch node_modules src/index.ts",
+    "dev": "ts-node-dev --respawn --files --transpile-only --no-notify --ignore-watch node_modules --require dotenv/config src/index.ts",
+
     "start": "nodemon dist/index.js",
     "build": "tsc",
     "test": "jest --setupFiles dotenv/config",
@@ -77,6 +79,7 @@
     "@types/node-cron": "^2.0.3",
     "cross-env": "^7.0.1",
     "jest": "^25.1.0",
+    "nodemon": "^3.1.11",
     "ts-jest": "^25.2.1",
     "ts-node-dev": "^1.0.0-pre.44",
     "typescript": "4.7.4"

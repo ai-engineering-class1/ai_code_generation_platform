@@ -1,13 +1,14 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 import { ArrowLeft, Settings, Plus, Activity, CheckCircle2, CalendarDays, Clock9, PlayCircle, Rocket, ExternalLink } from 'lucide-react'
 import apiClient from '@/lib/api'
-import { Project, Task, ProjectProgress } from '@/types'
+import { Project, Task, ProjectProgress, JiraConfiguration, GitHubConfiguration } from '@/types'
 import UserMenu from '@/components/UserMenu'
+import NotificationBell from '@/components/NotificationBell'
 
 export default function ProjectDetailPage({ params }: { params: { projectId: string } }) {
   const router = useRouter()
@@ -35,7 +36,56 @@ export default function ProjectDetailPage({ params }: { params: { projectId: str
       const response = await apiClient.get(`/projects/${projectId}/tasks`)
       return response.data
     },
+    refetchInterval: 5000, // Auto-refresh every 5 seconds to catch new Jira tasks
   })
+
+  const { data: jiraConfig } = useQuery<JiraConfiguration>({
+    queryKey: ['jiraConfig', projectId],
+    queryFn: async () => {
+      const response = await apiClient.get(`/jira/config/${projectId}`)
+      return response.data
+    },
+    retry: (failureCount, error: any) => {
+      // Don't retry if 404 (no config yet)
+      if (error.response?.status === 404) {
+        return false
+      }
+      return failureCount < 3
+    },
+  })
+
+  const { data: githubConfig } = useQuery<GitHubConfiguration>({
+    queryKey: ['githubConfig', projectId],
+    queryFn: async () => {
+      const response = await apiClient.get(`/github/config/${projectId}`)
+      return response.data
+    },
+    retry: (failureCount, error: any) => {
+      // Don't retry if 404 (no config yet)
+      if (error.response?.status === 404) {
+        return false
+      }
+      return failureCount < 3
+    },
+  })
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(10)
+
+  // Calculate pagination
+  const totalTasks = tasks?.length || 0
+  const totalPages = Math.ceil(totalTasks / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const paginatedTasks = tasks?.slice(startIndex, endIndex) || []
+
+  // Reset to page 1 when tasks change
+  useEffect(() => {
+    if (tasks && currentPage > Math.ceil(tasks.length / itemsPerPage)) {
+      setCurrentPage(1)
+    }
+  }, [tasks, currentPage, itemsPerPage])
 
   if (projectLoading) {
     return (
@@ -53,7 +103,6 @@ export default function ProjectDetailPage({ params }: { params: { projectId: str
     )
   }
 
-  const totalTasks = tasks?.length || 0
   const completedTasks = tasks?.filter((t) => t.status === 'completed').length || 0
   const blockedTasks =
     tasks?.filter((t) => t.status === 'blocked' || t.status === 'failed').length || 0
@@ -167,6 +216,7 @@ export default function ProjectDetailPage({ params }: { params: { projectId: str
                 <Settings className="h-5 w-5 mr-2" />
                 Settings
               </Link>
+              <NotificationBell />
               <UserMenu />
             </div>
           </div>
@@ -201,18 +251,85 @@ export default function ProjectDetailPage({ params }: { params: { projectId: str
 
         {/* Tasks Section */}
         <div className="bg-white rounded-lg shadow mb-8">
-          <div className="px-6 py-4 border-b border-gray-200">
+          <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900">Tasks</h2>
+            {tasks && tasks.length > 0 && (
+              <div className="flex items-center space-x-4">
+                <span className="text-sm text-gray-600">
+                  Showing {startIndex + 1}-{Math.min(endIndex, totalTasks)} of {totalTasks}
+                </span>
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value))
+                    setCurrentPage(1)
+                  }}
+                  className="text-sm border border-gray-300 rounded-md px-2 py-1"
+                >
+                  <option value={5}>5 per page</option>
+                  <option value={10}>10 per page</option>
+                  <option value={20}>20 per page</option>
+                  <option value={50}>50 per page</option>
+                </select>
+              </div>
+            )}
           </div>
           <div className="p-6">
             {tasksLoading ? (
               <p className="text-center text-gray-500">Loading tasks...</p>
             ) : tasks && tasks.length > 0 ? (
-              <div className="space-y-4">
-                {tasks.map((task) => (
-                  <TaskCard key={task.id} task={task} projectId={projectId} />
-                ))}
-              </div>
+              <>
+                <div className="space-y-4">
+                  {paginatedTasks.map((task) => (
+                    <TaskCard key={task.id} task={task} projectId={projectId} jiraConfig={jiraConfig} />
+                  ))}
+                </div>
+                {totalPages > 1 && (
+                  <div className="mt-6 flex items-center justify-center space-x-2">
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      disabled={currentPage === 1}
+                      className="px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Previous
+                    </button>
+                    <div className="flex items-center space-x-1">
+                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
+                        // Show first page, last page, current page, and pages around current
+                        if (
+                          page === 1 ||
+                          page === totalPages ||
+                          (page >= currentPage - 1 && page <= currentPage + 1)
+                        ) {
+                          return (
+                            <button
+                              key={page}
+                              onClick={() => setCurrentPage(page)}
+                              className={`px-3 py-2 text-sm border rounded-md ${
+                                currentPage === page
+                                  ? 'bg-blue-600 text-white border-blue-600'
+                                  : 'border-gray-300 hover:bg-gray-50'
+                              }`}
+                            >
+                              {page}
+                            </button>
+                          )
+                        } else if (page === currentPage - 2 || page === currentPage + 2) {
+                          return <span key={page} className="px-2 text-gray-500">...</span>
+                        }
+                        return null
+                      })}
+                    </div>
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                      disabled={currentPage === totalPages}
+                      className="px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="text-center py-12">
                 <p className="text-gray-500 mb-4">No tasks yet</p>
@@ -232,15 +349,17 @@ export default function ProjectDetailPage({ params }: { params: { projectId: str
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <IntegrationCard
             title="Jira Integration"
-            status={project.jiraProjectKey ? 'connected' : 'not_connected'}
+            status={jiraConfig && jiraConfig.jiraUrl && jiraConfig.jiraUrl.trim() ? 'connected' : 'not_connected'}
             projectKey={project.jiraProjectKey}
             projectId={projectId}
+            jiraConfig={jiraConfig}
           />
           <IntegrationCard
             title="GitHub Integration"
             status={project.githubRepoUrl ? 'connected' : 'not_connected'}
             repoUrl={project.githubRepoUrl}
             projectId={projectId}
+            githubConfig={githubConfig}
           />
         </div>
         {/* Releases */}
@@ -302,29 +421,105 @@ function StatCard({ title, value, icon }: { title: string; value: number; icon: 
   )
 }
 
-function TaskCard({ task, projectId }: { task: Task; projectId: string }) {
+function TaskCard({ task, projectId, jiraConfig }: { task: Task; projectId: string; jiraConfig?: JiraConfiguration }) {
+  // Helper function to get Jira issue URL
+  const getJiraIssueUrl = (jiraIssueKey: string, jiraConfig: JiraConfiguration): string | null => {
+    if (!jiraConfig?.jiraUrl || !jiraIssueKey) return null
+    
+    let baseUrl = jiraConfig.jiraUrl.trim()
+    baseUrl = baseUrl.replace(/\/$/, '') // Remove trailing slash
+    try {
+      const urlObj = new URL(baseUrl)
+      baseUrl = `${urlObj.protocol}//${urlObj.hostname}`
+    } catch (e) {
+      const match = baseUrl.match(/https?:\/\/[^\/]+/)
+      if (match) {
+        baseUrl = match[0]
+      }
+    }
+    
+    // Construct Jira issue URL
+    return `${baseUrl}/browse/${jiraIssueKey}`
+  }
+
+  const jiraIssueUrl = task.jiraIssueKey && jiraConfig ? getJiraIssueUrl(task.jiraIssueKey, jiraConfig) : null
+  const cardHref = jiraIssueUrl || `/projects/${projectId}/tasks/${task.id}`
+
+  // Use regular anchor for Jira (external), Link for internal tasks
+  if (jiraIssueUrl) {
+    return (
+      <a
+        href={cardHref}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block border border-gray-200 rounded-lg p-4 hover:border-blue-500 hover:shadow-md transition"
+      >
+        <div className="flex items-start justify-between mb-2">
+          <div className="flex-1">
+            <div className="flex items-center space-x-2 mb-1">
+              <h3 className="font-semibold text-gray-900">
+                {task.title}
+              </h3>
+              {task.jiraIssueKey && (
+                <span className="text-xs text-blue-600 font-medium">
+                  ({task.jiraIssueKey})
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-gray-600 line-clamp-2">{task.description}</p>
+          </div>
+          <div className="flex items-center space-x-2 ml-4">
+            <div className="flex flex-col items-end space-y-2">
+              <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(task.status)}`}>
+                {task.status}
+              </span>
+              <span className={`px-2 py-1 text-xs rounded-full ${getPriorityColor(task.priority)}`}>
+                {task.priority}
+              </span>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center justify-between text-xs text-gray-500">
+          <span>{task.type}</span>
+          <span>{task.currentStage?.replace(/_/g, ' ') || 'N/A'}</span>
+        </div>
+      </a>
+    )
+  }
+
   return (
     <Link
-      href={`/projects/${projectId}/tasks/${task.id}`}
+      href={cardHref}
       className="block border border-gray-200 rounded-lg p-4 hover:border-blue-500 hover:shadow-md transition"
     >
       <div className="flex items-start justify-between mb-2">
         <div className="flex-1">
-          <h3 className="font-semibold text-gray-900 mb-1">{task.title}</h3>
+          <div className="flex items-center space-x-2 mb-1">
+            <h3 className="font-semibold text-gray-900">
+              {task.title}
+            </h3>
+            {task.jiraIssueKey && (
+              <span className="text-xs text-blue-600 font-medium">
+                ({task.jiraIssueKey})
+              </span>
+            )}
+          </div>
           <p className="text-sm text-gray-600 line-clamp-2">{task.description}</p>
         </div>
-        <div className="flex flex-col items-end space-y-2 ml-4">
-          <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(task.status)}`}>
-            {task.status}
-          </span>
-          <span className={`px-2 py-1 text-xs rounded-full ${getPriorityColor(task.priority)}`}>
-            {task.priority}
-          </span>
+        <div className="flex items-center space-x-2 ml-4">
+          <div className="flex flex-col items-end space-y-2">
+            <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(task.status)}`}>
+              {task.status}
+            </span>
+            <span className={`px-2 py-1 text-xs rounded-full ${getPriorityColor(task.priority)}`}>
+              {task.priority}
+            </span>
+          </div>
         </div>
       </div>
       <div className="flex items-center justify-between text-xs text-gray-500">
         <span>{task.type}</span>
-        <span>{task.currentStage.replace(/_/g, ' ')}</span>
+        <span>{task.currentStage?.replace(/_/g, ' ') || 'N/A'}</span>
       </div>
     </Link>
   )
@@ -336,17 +531,86 @@ function IntegrationCard({
   projectKey,
   repoUrl,
   projectId,
+  jiraConfig,
+  githubConfig,
 }: {
   title: string
   status: 'connected' | 'not_connected'
   projectKey?: string
   repoUrl?: string
   projectId: string
+  jiraConfig?: JiraConfiguration
+  githubConfig?: GitHubConfiguration
 }) {
+  // Helper function to generate Jira URLs (same as in settings page)
+  const getJiraUrls = (jiraUrl: string, projectKey: string) => {
+    let baseUrl = jiraUrl.trim()
+    baseUrl = baseUrl.replace(/\/$/, '') // Remove trailing slash
+    try {
+      const urlObj = new URL(baseUrl)
+      baseUrl = `${urlObj.protocol}//${urlObj.hostname}`
+    } catch (e) {
+      const match = baseUrl.match(/https?:\/\/[^\/]+/)
+      if (match) {
+        baseUrl = match[0]
+      }
+    }
+    
+    if (baseUrl.includes('atlassian.net')) {
+      return {
+        projectList: `${baseUrl}/jira/core/projects/${projectKey}/list?jql=project%20%3D%20%22${projectKey}%22%20ORDER%20BY%20created%20DESC`,
+        projectBrowse: `${baseUrl}/browse/${projectKey}`
+      }
+    }
+    
+    return {
+      projectBrowse: `${baseUrl}/browse/${projectKey}`,
+      projectList: `${baseUrl}/browse/${projectKey}`
+    }
+  }
+
+  // Use jiraConfig.jiraProjectKey if available, otherwise fall back to projectKey
+  const effectiveProjectKey = jiraConfig?.jiraProjectKey || projectKey
+  // Check if jiraConfig exists, has a valid jiraUrl, and has an effectiveProjectKey
+  const jiraUrls = jiraConfig && jiraConfig.jiraUrl && jiraConfig.jiraUrl.trim() && effectiveProjectKey && effectiveProjectKey.trim()
+    ? getJiraUrls(jiraConfig.jiraUrl, effectiveProjectKey)
+    : null
+
+  // Generate GitHub repository URL
+  const githubRepoUrl = githubConfig 
+    ? `https://github.com/${githubConfig.repoOwner}/${githubConfig.repoName}`
+    : null
+
   return (
     <div className="bg-white rounded-lg shadow p-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+        <div className="flex items-center space-x-3">
+          <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+          {title === 'Jira Integration' && status === 'connected' && jiraUrls && (
+            <a
+              href={jiraUrls.projectList || jiraUrls.projectBrowse}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800 transition"
+              title="View Tasks in Jira"
+            >
+              <ExternalLink className="h-4 w-4 mr-1" />
+              View Tasks in Jira
+            </a>
+          )}
+          {title === 'GitHub Integration' && githubRepoUrl && (
+            <a
+              href={githubRepoUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800 transition"
+              title="View Repository on GitHub"
+            >
+              <ExternalLink className="h-4 w-4 mr-1" />
+              View Repository
+            </a>
+          )}
+        </div>
         <span
           className={`px-2 py-1 text-xs rounded-full ${
             status === 'connected'

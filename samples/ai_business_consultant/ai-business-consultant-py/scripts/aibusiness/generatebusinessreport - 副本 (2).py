@@ -1,12 +1,19 @@
 # 在文件顶部添加
 from dotenv import load_dotenv
-load_dotenv()  # 加载.env文件
+from pathlib import Path
+import os
+
+# Load .env file from the parent directory (ai-business-consultant-py)
+env_path = Path(__file__).parent.parent.parent / '.env'
+load_dotenv(dotenv_path=env_path)
+# Also try loading from current directory as fallback
+load_dotenv()
+
 import json
 import openai
 import logging
 import requests
 from fastapi import FastAPI, HTTPException
-import os
 import oss2
 import oss2.exceptions
 from docx import Document
@@ -22,8 +29,22 @@ import redis
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# OpenAI API setup
-client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# OpenAI API setup - lazy initialization
+_openai_client = None
+
+def get_openai_client():
+    """Get or create OpenAI client with proper error handling"""
+    global _openai_client
+    if _openai_client is None:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError(
+                "OPENAI_API_KEY environment variable is not set. "
+                "Please create a .env file in the ai-business-consultant-py directory "
+                "and add: OPENAI_API_KEY=your_api_key_here"
+            )
+        _openai_client = openai.OpenAI(api_key=api_key)
+    return _openai_client
 
 # 在OpenAI API setup之后添加OSS配置
 OSS_ACCESS_KEY_ID = os.getenv('OSS_ACCESS_KEY_ID')
@@ -191,6 +212,7 @@ def generate_report_section(section_name, data):
     try:
         logging.info(f"Generating report section: {section_name}")
         prompt = f"Generate a paragraph for the '{section_name}' section of a business report based on the following data: {data}"
+        client = get_openai_client()
         response = client.chat.completions.create(
             # model="gpt-4-turbo",
             model="gpt-4o-mini",

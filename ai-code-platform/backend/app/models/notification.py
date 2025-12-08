@@ -40,7 +40,7 @@ class TaskWorkflowHistory(Base):
     from_stage = Column(String(50))
     to_stage = Column(String(50))
     status = Column(String(50))
-    metadata = Column(JSON)
+    workflow_metadata = Column("workflow_metadata", JSON)  # Column name matches database
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Relationships
