@@ -12,6 +12,7 @@ from app.schemas.task import (
     TaskDetailResponse, SpecificationCreate, SpecificationResponse
 )
 from app.services.claude_service import ClaudeService
+from app.services.notification_service import notify_task_assigned
 
 router = APIRouter()
 
@@ -74,6 +75,15 @@ async def create_task(
     db.commit()
     db.refresh(new_task)
     
+    # Notify assignee if task is assigned to someone other than the creator
+    if new_task.assignee_id and new_task.assignee_id != current_user.id:
+        try:
+            notify_task_assigned(db, new_task, new_task.assignee_id)
+            db.commit()
+        except Exception as e:
+            # Log error but don't fail task creation
+            print(f"Error sending assignment notification: {e}")
+    
     return new_task
 
 
@@ -130,9 +140,15 @@ async def get_task(
         CodeGeneration.task_id == task_id
     ).order_by(CodeGeneration.created_at.desc()).first()
     
-    task.workflow_history = db.query(TaskWorkflowHistory).filter(
-        TaskWorkflowHistory.task_id == task_id
-    ).order_by(TaskWorkflowHistory.created_at.desc()).all()
+    # Load workflow history - use try/except to handle cases where table might not exist or have issues
+    try:
+        task.workflow_history = db.query(TaskWorkflowHistory).filter(
+            TaskWorkflowHistory.task_id == task_id
+        ).order_by(TaskWorkflowHistory.created_at.desc()).all()
+    except Exception as e:
+        print(f"Warning: Could not load workflow history: {e}")
+        # Set to empty list if query fails
+        task.workflow_history = []
     
     return task
 
@@ -169,12 +185,26 @@ async def update_task(
             detail="Task not found"
         )
     
+    # Store old assignee_id to detect changes
+    old_assignee_id = task.assignee_id
+    
     # Update fields
     for field, value in task_data.dict(exclude_unset=True).items():
         setattr(task, field, value)
     
     db.commit()
     db.refresh(task)
+    
+    # Notify if assignee changed and new assignee is different from current user
+    if old_assignee_id != task.assignee_id and task.assignee_id:
+        # Only notify if assignee is different from the person making the change
+        if task.assignee_id != current_user.id:
+            try:
+                notify_task_assigned(db, task, task.assignee_id)
+                db.commit()
+            except Exception as e:
+                # Log error but don't fail task update
+                print(f"Error sending assignment notification: {e}")
     
     return task
 

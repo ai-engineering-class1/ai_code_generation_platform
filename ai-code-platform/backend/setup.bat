@@ -163,6 +163,15 @@ if /i "!init_db!"=="y" (
     ) else (
         echo ✓ Database tables created
     )
+    
+    REM Update schema - add any missing columns
+    echo Updating database schema...
+    python update_db_schema.py
+    if errorlevel 1 (
+        echo ⚠️  Schema update had issues. Check the output above.
+    ) else (
+        echo ✓ Database schema updated
+    )
 )
 echo.
 

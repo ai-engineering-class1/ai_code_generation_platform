@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import apiClient from '@/lib/api'
-import { CreateTaskData } from '@/types'
+import { CreateTaskData, User } from '@/types'
 
 export default function NewTaskPage({ params }: { params: { projectId: string } }) {
   const router = useRouter()
@@ -19,6 +19,7 @@ export default function NewTaskPage({ params }: { params: { projectId: string } 
     type: 'feature',
     priority: 'medium',
     jiraIssueKey: '',
+    assigneeId: '',
   })
 
   // Check authentication
@@ -28,6 +29,15 @@ export default function NewTaskPage({ params }: { params: { projectId: string } 
       router.push('/login')
     }
   }, [router])
+
+  // Fetch users for assignee dropdown
+  const { data: users = [] } = useQuery<User[]>({
+    queryKey: ['users'],
+    queryFn: async () => {
+      const response = await apiClient.get('/auth/users')
+      return response.data
+    },
+  })
 
   const createTaskMutation = useMutation({
     mutationFn: async (data: CreateTaskData) => {
@@ -144,6 +154,33 @@ export default function NewTaskPage({ params }: { params: { projectId: string } 
                 <option value="high">High</option>
                 <option value="critical">Critical</option>
               </select>
+            </div>
+
+            {/* Assignee (Optional) */}
+            <div>
+              <label htmlFor="assigneeId" className="block text-sm font-medium text-gray-700 mb-2">
+                Assignee (Optional)
+              </label>
+              <select
+                id="assigneeId"
+                name="assigneeId"
+                value={formData.assigneeId}
+                onChange={handleChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">-- No Assignee --</option>
+                {users.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.name} ({user.email})
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-sm text-gray-500">
+                Assign this task to a user. Leave empty to create an unassigned task.
+              </p>
+              <p className="mt-1 text-xs text-blue-600">
+                💡 Tip: To test notifications, assign to a different user than yourself!
+              </p>
             </div>
 
             {/* Jira Issue Key (Optional) */}

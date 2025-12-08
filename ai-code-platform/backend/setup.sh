@@ -135,6 +135,12 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     python -c "from app.core.database import Base, engine; Base.metadata.create_all(bind=engine)" && \
         echo -e "${GREEN}✓ Database tables created${NC}" || \
         echo -e "${RED}✗ Failed to create database tables. Check your database configuration.${NC}"
+    
+    # Update schema - add any missing columns
+    echo -e "${YELLOW}Updating database schema...${NC}"
+    python update_db_schema.py && \
+        echo -e "${GREEN}✓ Database schema updated${NC}" || \
+        echo -e "${YELLOW}⚠️  Schema update had issues. Check the output above.${NC}"
 fi
 
 echo -e "\n${GREEN}=================================================="
