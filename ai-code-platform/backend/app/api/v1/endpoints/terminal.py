@@ -44,10 +44,17 @@ async def websocket_endpoint(websocket: WebSocket):
 
     try:
         if use_pty and os.name == 'nt':
-            # Create PTY process
+            # Create PTY process with proper environment
+            # This is crucial for interactive tools like 'claude', 'vim', etc.
+            env = os.environ.copy()
+            env["TERM"] = "xterm-256color"
+            env["COLORTERM"] = "truecolor"
+            env["PYTHONIOENCODING"] = "utf-8"
+            
             proc_obj = PtyProcess.spawn(
                 [shell_path, "-NoLogo"],
-                dimensions=(24, 80) # Default size, maybe update later if resize event supported
+                dimensions=(24, 80),
+                env=env
             )
             print(f"DEBUG: PTY Subprocess created with PID: {proc_obj.pid}")
 

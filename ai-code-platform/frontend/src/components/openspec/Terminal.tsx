@@ -44,19 +44,24 @@ export default function Terminal({ isOpen, onClose, mode = 'fixed' }: TerminalPr
 
             // Use ResizeObserver to fit terminal when container dimensions change
             // This is safer than setTimeout and handles dynamic layout changes
+            // Use ResizeObserver to fit terminal when container dimensions change
+            // This is safer than setTimeout and handles dynamic layout changes
             const resizeObserver = new ResizeObserver(() => {
                 // Defer fit to next animation frame to avoid layout thrashing/race conditions
                 window.requestAnimationFrame(() => {
                     // Check if refs are still valid (component might have unmounted)
                     if (!terminalRef.current || !xtermRef.current) return;
 
-                    // Check if element is visible and has size
-                    if (terminalRef.current.clientWidth === 0 || terminalRef.current.clientHeight === 0) return;
+                    // Check visibility
+                    if (!terminalRef.current.offsetParent) return;
 
                     try {
-                        fitAddon.fit();
+                        const dims = fitAddon.proposeDimensions();
+                        if (dims && dims.cols > 1 && dims.rows > 1) {
+                            fitAddon.fit();
+                        }
                     } catch (e) {
-                        // ignore fit errors during layout transitions
+                        // ignore
                     }
                 });
             });
@@ -134,7 +139,17 @@ export default function Terminal({ isOpen, onClose, mode = 'fixed' }: TerminalPr
         if (isOpen && fitAddonRef.current) {
             // Small delay to allow transition to finish
             setTimeout(() => {
-                fitAddonRef.current?.fit();
+                try {
+                    // Safety check before fitting
+                    if (!terminalRef.current || !terminalRef.current.offsetParent) return;
+
+                    const dims = fitAddonRef.current?.proposeDimensions();
+                    if (dims && dims.cols > 1 && dims.rows > 1) {
+                        fitAddonRef.current?.fit();
+                    }
+                } catch (e) {
+                    // ignore
+                }
             }, 300);
         }
     }, [isOpen, isMaximized]);
