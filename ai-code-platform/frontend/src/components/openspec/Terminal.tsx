@@ -42,14 +42,26 @@ export default function Terminal({ isOpen, onClose, mode = 'fixed' }: TerminalPr
 
             term.open(terminalRef.current);
 
-            // Delay fit to ensure container has dimensions
-            setTimeout(() => {
-                try {
-                    fitAddon.fit();
-                } catch (e) {
-                    console.warn('Fit failed:', e);
-                }
-            }, 0);
+            // Use ResizeObserver to fit terminal when container dimensions change
+            // This is safer than setTimeout and handles dynamic layout changes
+            const resizeObserver = new ResizeObserver(() => {
+                // Defer fit to next animation frame to avoid layout thrashing/race conditions
+                window.requestAnimationFrame(() => {
+                    // Check if refs are still valid (component might have unmounted)
+                    if (!terminalRef.current || !xtermRef.current) return;
+
+                    // Check if element is visible and has size
+                    if (terminalRef.current.clientWidth === 0 || terminalRef.current.clientHeight === 0) return;
+
+                    try {
+                        fitAddon.fit();
+                    } catch (e) {
+                        // ignore fit errors during layout transitions
+                    }
+                });
+            });
+
+            resizeObserver.observe(terminalRef.current);
 
             xtermRef.current = term;
             fitAddonRef.current = fitAddon;
@@ -90,43 +102,24 @@ export default function Terminal({ isOpen, onClose, mode = 'fixed' }: TerminalPr
                 term.write('\r\n\x1b[31mConnection error\x1b[0m\r\n');
             };
 
-            // Local Line Editing handler
+            // Send input to server directly - PTY handles buffering and echo
             term.onData((data) => {
-                // iterate over chars (handle paste)
-                for (let i = 0; i < data.length; i++) {
-                    const char = data[i];
-                    const code = char.charCodeAt(0);
-
-                    if (code === 13) { // Enter (\r)
-                        term.write('\r\n');
-                        if (ws.readyState === WebSocket.OPEN) {
-                            ws.send(commandBuffer.current + '\n');
-                        }
-                        commandBuffer.current = '';
-                    } else if (code === 127) { // Backspace
-                        if (commandBuffer.current.length > 0) {
-                            // Visual backspace: move left, space, move left
-                            term.write('\b \b');
-                            commandBuffer.current = commandBuffer.current.slice(0, -1);
-                        }
-                    } else if (code >= 32) { // Printable (simple check)
-                        commandBuffer.current += char;
-                        term.write(char);
-                    }
-                    // Ignore other control chars (arrows, etc) for now
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(data);
                 }
             });
 
             wsRef.current = ws;
 
-            // Handle resize
+            // Handle resize (window resize is still useful for general updates)
             const handleResize = () => {
-                fitAddon.fit();
+                // fitAddon.fit() is handled by ResizeObserver now mostly, but safe to keep
             };
             window.addEventListener('resize', handleResize);
 
             return () => {
                 window.removeEventListener('resize', handleResize);
+                resizeObserver.disconnect();
                 ws.close();
                 term.dispose();
                 xtermRef.current = null;
