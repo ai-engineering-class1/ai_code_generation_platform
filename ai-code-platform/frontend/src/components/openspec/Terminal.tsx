@@ -17,6 +17,8 @@ export default function Terminal({ isOpen, onClose, mode = 'fixed' }: TerminalPr
     const xtermRef = useRef<XTerm | null>(null);
     const fitAddonRef = useRef<FitAddon | null>(null);
     const wsRef = useRef<WebSocket | null>(null);
+    // Buffer for local line editing
+    const commandBuffer = useRef<string>('');
     const [isMaximized, setIsMaximized] = useState(false);
 
     useEffect(() => {
@@ -58,15 +60,16 @@ export default function Terminal({ isOpen, onClose, mode = 'fixed' }: TerminalPr
             console.log('Connecting to Terminal WebSocket:', wsUrl);
             term.write(`\r\n\x1b[90mConnecting to service at ${wsUrl}...\x1b[0m\r\n`);
 
-            console.log('Connecting to Terminal WebSocket:', wsUrl);
             const ws = new WebSocket(wsUrl);
 
             ws.onopen = () => {
                 term.write('\r\n\x1b[32mConnected to PowerShell Console\x1b[0m\r\n');
-                ws.send('dir\r'); // Initial command to show something
+                // ws.send('dir\r'); // Don't auto-send, let user type
             };
 
             ws.onmessage = (event) => {
+                // If backend does echo, we might see duplicates. 
+                // For now, assume backend output is "output"
                 term.write(event.data);
             };
 
@@ -79,10 +82,30 @@ export default function Terminal({ isOpen, onClose, mode = 'fixed' }: TerminalPr
                 term.write('\r\n\x1b[31mConnection error\x1b[0m\r\n');
             };
 
-            // Send input to server
+            // Local Line Editing handler
             term.onData((data) => {
-                if (ws.readyState === WebSocket.OPEN) {
-                    ws.send(data);
+                // iterate over chars (handle paste)
+                for (let i = 0; i < data.length; i++) {
+                    const char = data[i];
+                    const code = char.charCodeAt(0);
+
+                    if (code === 13) { // Enter (\r)
+                        term.write('\r\n');
+                        if (ws.readyState === WebSocket.OPEN) {
+                            ws.send(commandBuffer.current + '\n');
+                        }
+                        commandBuffer.current = '';
+                    } else if (code === 127) { // Backspace
+                        if (commandBuffer.current.length > 0) {
+                            // Visual backspace: move left, space, move left
+                            term.write('\b \b');
+                            commandBuffer.current = commandBuffer.current.slice(0, -1);
+                        }
+                    } else if (code >= 32) { // Printable (simple check)
+                        commandBuffer.current += char;
+                        term.write(char);
+                    }
+                    // Ignore other control chars (arrows, etc) for now
                 }
             });
 
@@ -100,6 +123,7 @@ export default function Terminal({ isOpen, onClose, mode = 'fixed' }: TerminalPr
                 term.dispose();
                 xtermRef.current = null;
                 wsRef.current = null;
+                commandBuffer.current = '';
             };
         }
     }, [isOpen]);
