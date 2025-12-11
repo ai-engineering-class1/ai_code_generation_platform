@@ -41,7 +41,15 @@ export default function Terminal({ isOpen, onClose, mode = 'fixed' }: TerminalPr
             term.loadAddon(fitAddon);
 
             term.open(terminalRef.current);
-            fitAddon.fit();
+
+            // Delay fit to ensure container has dimensions
+            setTimeout(() => {
+                try {
+                    fitAddon.fit();
+                } catch (e) {
+                    console.warn('Fit failed:', e);
+                }
+            }, 0);
 
             xtermRef.current = term;
             fitAddonRef.current = fitAddon;
