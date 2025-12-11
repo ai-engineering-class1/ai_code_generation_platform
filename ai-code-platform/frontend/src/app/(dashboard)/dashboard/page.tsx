@@ -3,7 +3,7 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Activity, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { Plus, Activity, CheckCircle2, AlertTriangle, FileText } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import apiClient from '@/lib/api'
 import { Project, Task } from '@/types'

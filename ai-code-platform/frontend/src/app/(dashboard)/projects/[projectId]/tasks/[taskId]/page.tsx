@@ -174,20 +174,7 @@ export default function TaskDetailPage({
     }
   }, [isEditModalOpen, task])
 
-  const generateSpecMutation = useMutation({
-    mutationFn: async () => {
-      const response = await apiClient.post(`/github/generate-spec/${taskId}`)
-      return response.data
-    },
-    onSuccess: () => {
-      // Refresh task data to show the new specification
-      queryClient.invalidateQueries({ queryKey: ['task', projectId, taskId] })
-      alert('Specification generation started! It may take a few moments.')
-    },
-    onError: (error: any) => {
-      alert(`Failed to generate specification: ${error.response?.data?.detail || error.message}`)
-    },
-  })
+
 
   const assignToAgentMutation = useMutation({
     mutationFn: async () => {
@@ -349,6 +336,13 @@ export default function TaskDetailPage({
                         Approve Specification
                       </button>
                     )}
+                    <Link
+                      href={`/openspec-editor?projectId=${projectId}&taskId=${taskId}`}
+                      className="px-3 py-1.5 bg-gray-100 text-gray-700 text-xs font-medium rounded-md hover:bg-gray-200 transition flex items-center"
+                    >
+                      <FileText className="h-3 w-3 mr-1" />
+                      Edit Specification
+                    </Link>
                   </div>
                 </div>
                 <div className="prose max-w-none">
@@ -602,13 +596,13 @@ export default function TaskDetailPage({
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Actions</h2>
               <div className="space-y-2">
                 {!task.specification && (
-                  <button
-                    onClick={() => generateSpecMutation.mutate()}
-                    disabled={generateSpecMutation.isPending}
-                    className="w-full px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  <Link
+                    href={`/openspec-editor?projectId=${projectId}&taskId=${taskId}`}
+                    className="w-full px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition flex items-center justify-center font-medium"
                   >
-                    {generateSpecMutation.isPending ? 'Generating...' : 'Generate Specification'}
-                  </button>
+                    <FileText className="h-4 w-4 mr-2" />
+                    Edit Specification
+                  </Link>
                 )}
                 <button
                   onClick={() => assignToAgentMutation.mutate()}
