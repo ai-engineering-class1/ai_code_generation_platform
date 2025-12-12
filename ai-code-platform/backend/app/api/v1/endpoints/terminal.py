@@ -350,7 +350,6 @@ class RestrictedShell:
             except:
                 pass
             self.proc_obj = None
-=======
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     
