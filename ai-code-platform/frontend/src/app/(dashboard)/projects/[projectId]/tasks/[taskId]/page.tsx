@@ -67,7 +67,7 @@ export default function TaskDetailPage({
 
   // Pagination for Activity Log
   const [activityPage, setActivityPage] = useState(1)
-  const activityPerPage = 5
+  const [activityPerPage, setActivityPerPage] = useState(5)
 
   const mockActivities = [
     { id: 1, date: "2025-12-11 15:30:02", user: "Victor", comment: "analyzed the error log" },
@@ -597,8 +597,23 @@ export default function TaskDetailPage({
             {/* Mock Activity Log */}
             {/* Activity Log */}
             <div className="bg-white rounded-lg shadow mt-6">
-              <div className="px-6 py-4 border-b border-gray-200">
+              <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
                 <h2 className="text-lg font-semibold text-gray-900">Activity Log</h2>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-500">Items per page:</span>
+                  <select
+                    value={activityPerPage}
+                    onChange={(e) => {
+                      setActivityPerPage(Number(e.target.value))
+                      setActivityPage(1)
+                    }}
+                    className="text-sm border border-gray-300 rounded-md px-2 py-1 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value={5}>5</option>
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                  </select>
+                </div>
               </div>
               <div className="p-6 space-y-4">
                 {paginatedActivities.map((activity) => (

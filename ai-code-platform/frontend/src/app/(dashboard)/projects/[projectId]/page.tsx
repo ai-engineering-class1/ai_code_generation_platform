@@ -211,9 +211,9 @@ export default function ProjectDetailPage({ params }: { params: { projectId: str
               <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
                 <h2 className="text-lg font-semibold text-gray-900">Tasks</h2>
                 {tasks && tasks.length > 0 && (
-                  <div className="flex items-center space-x-4">
+                  <div className="flex items-center space-x-2">
                     <span className="text-sm text-gray-600">
-                      Showing {startIndex + 1}-{Math.min(endIndex, totalTasks)} of {totalTasks}
+                      Items per page:
                     </span>
                     <select
                       value={itemsPerPage}
@@ -223,10 +223,10 @@ export default function ProjectDetailPage({ params }: { params: { projectId: str
                       }}
                       className="text-sm border border-gray-300 rounded-md px-2 py-1"
                     >
-                      <option value={5}>5 per page</option>
-                      <option value={10}>10 per page</option>
-                      <option value={20}>20 per page</option>
-                      <option value={50}>50 per page</option>
+                      <option value={5}>5</option>
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
                     </select>
                   </div>
                 )}
