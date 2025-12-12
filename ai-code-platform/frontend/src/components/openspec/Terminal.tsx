@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Terminal as XTerm } from 'xterm';
-import { FitAddon } from 'xterm-addon-fit';
-import 'xterm/css/xterm.css';
+import { Terminal as XTerm } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import '@xterm/xterm/css/xterm.css';
 import { X, Maximize2, Minimize2 } from 'lucide-react';
 
 interface TerminalProps {
@@ -109,6 +109,14 @@ export default function Terminal({ isOpen, onClose, mode = 'fixed' }: TerminalPr
 
                 ws.onopen = () => {
                     term?.write('\r\n\x1b[32mConnected to PowerShell Console\x1b[0m\r\n');
+                    // Send initial resize
+                    if (term && ws?.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({
+                            type: 'resize',
+                            cols: term.cols,
+                            rows: term.rows
+                        }));
+                    }
                 };
 
                 ws.onmessage = (event) => {
@@ -126,7 +134,20 @@ export default function Terminal({ isOpen, onClose, mode = 'fixed' }: TerminalPr
 
                 term.onData((data) => {
                     if (ws?.readyState === WebSocket.OPEN) {
-                        ws.send(data);
+                        ws.send(JSON.stringify({
+                            type: 'input',
+                            data
+                        }));
+                    }
+                });
+
+                term.onResize((size) => {
+                    if (ws?.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({
+                            type: 'resize',
+                            cols: size.cols,
+                            rows: size.rows
+                        }));
                     }
                 });
 
