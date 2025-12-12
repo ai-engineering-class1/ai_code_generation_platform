@@ -122,12 +122,12 @@ echo -e "${GREEN}╚════════════════════
 echo -e "\n${CYAN}You need to open ${YELLOW}3 terminal windows${CYAN}:${NC}\n"
 
 echo -e "${YELLOW}═══════════════════════════════════════════════════════════${NC}"
-echo -e "${YELLOW}Terminal 1 - Backend (Port 8082)${NC}"
+echo -e "${YELLOW}Terminal 1 - Backend (Port 8000)${NC}"
 echo -e "${YELLOW}═══════════════════════════════════════════════════════════${NC}"
 echo -e "Run these commands:"
 echo -e "${GREEN}cd $PROJECT_ROOT/backend${NC}"
 echo -e "${GREEN}source venv/bin/activate${NC}"
-echo -e "${GREEN}uvicorn app.main:app --reload --host 0.0.0.0 --port 8082${NC}"
+echo -e "${GREEN}uvicorn app.main:app --reload --host 0.0.0.0 --port 8000${NC}"
 echo -e "\nOr simply:"
 echo -e "${GREEN}cd $PROJECT_ROOT/backend && ./start.sh${NC}"
 
@@ -144,8 +144,8 @@ echo -e "${YELLOW}════════════════════�
 
 echo -e "\n${CYAN}After starting both servers:${NC}"
 echo -e "  Frontend: ${GREEN}http://localhost:3000${NC}"
-echo -e "  Backend:  ${GREEN}http://localhost:8082${NC}"
-echo -e "  API Docs: ${GREEN}http://localhost:8082/docs${NC}"
+echo -e "  Backend:  ${GREEN}http://localhost:8000${NC}"
+echo -e "  API Docs: ${GREEN}http://localhost:8000/docs${NC}"
 
 echo -e "\n${CYAN}Login Credentials:${NC}"
 echo -e "  Email:    ${GREEN}test@example.com${NC}"
@@ -159,7 +159,7 @@ echo -e "\n${CYAN}Detailed Steps:${NC}\n"
 echo -e "${BLUE}1.${NC} Open a new terminal and run:"
 echo -e "   ${GREEN}cd $PROJECT_ROOT/backend${NC}"
 echo -e "   ${GREEN}source venv/bin/activate${NC}"
-echo -e "   ${GREEN}uvicorn app.main:app --reload --host 0.0.0.0 --port 8082${NC}"
+echo -e "   ${GREEN}uvicorn app.main:app --reload --host 0.0.0.0 --port 8000${NC}"
 
 echo -e "\n${BLUE}2.${NC} Open another terminal and run:"
 echo -e "   ${GREEN}cd $PROJECT_ROOT/frontend${NC}"
@@ -175,7 +175,7 @@ echo -e "   Email: ${GREEN}test@example.com${NC}"
 echo -e "   Password: ${GREEN}testpassword123${NC}"
 
 echo -e "\n${CYAN}Troubleshooting:${NC}"
-echo -e "  - If port 8082 is in use: ${GREEN}lsof -ti:8082 | xargs kill -9${NC}"
+echo -e "  - If port 8000 is in use: ${GREEN}lsof -ti:8000 | xargs kill -9${NC}"
 echo -e "  - If port 3000 is in use: ${GREEN}lsof -ti:3000 | xargs kill -9${NC}"
 echo -e "  - Check backend logs for errors in Terminal 1"
 echo -e "  - Check frontend logs for errors in Terminal 2"
