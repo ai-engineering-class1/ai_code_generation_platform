@@ -12,6 +12,7 @@ import {
 } from '@/lib/types/openspec';
 import * as api from '@/lib/api/openspec';
 import apiClient from '@/lib/api'; // Import general API client
+import { ArrowLeft, Save, Download, UserPlus } from 'lucide-react';
 
 // Components
 import dynamic from 'next/dynamic';
@@ -31,8 +32,10 @@ function EditorContent() {
     const [taskId, setTaskId] = useState<string | null>(null);
     const [project, setProject] = useState<OpenSpecProject | undefined>(undefined);
     const [taskDescription, setTaskDescription] = useState<string>('');
+    const [task, setTask] = useState<Task | undefined>(undefined);
     const [selectedSpecId, setSelectedSpecId] = useState<string | undefined>(undefined);
     const [selectedSpec, setSelectedSpec] = useState<Specification | undefined>(undefined);
+    const [specContent, setSpecContent] = useState<string>('');
     const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
 
     // UI State
@@ -54,48 +57,96 @@ function EditorContent() {
         const defaultProject: OpenSpecProject = {
             id: pId,
             projectName: 'New OpenSpec Project',
-            owner: 'DrLinAITeam2', // In real app, get from auth context
-            repository: 'simplest-repo',
+            owner: 'user',
+            repository: 'repo',
             isPrivate: true,
             specTree: [],
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
         };
-
-        // In a real app, we would fetch existing project details here
-        // api.getProject(id).then(...)
+        // Initial set to avoid UI flicker
         setProject(defaultProject);
 
-        // Fetch Task Details if taskId is present
-        if (pId && tId) {
-            const fetchTaskDetails = async () => {
-                try {
-                    // Fetch task details using generic API client
-                    // Assuming endpoint /projects/{projectId}/tasks/{taskId} exists as per previous context
-                    const response = await apiClient.get(`/projects/${pId}/tasks/${tId}`);
-                    if (response.data) {
-                        setTaskDescription(response.data.description || 'No description available for this task.');
+        const fetchData = async () => {
+            if (!pId || pId.startsWith('draft-')) return;
 
-                        // Also update project name/owner/repo if available in response or separate call
-                        // For now we just stick to what we have, or maybe mapped from task
-                        if (response.data.project) {
-                            setProject(prev => prev ? {
-                                ...prev,
-                                projectName: response.data.project.name,
-                                owner: 'owner', // would come from project details
-                                repository: 'repo'
-                            } : undefined);
+            try {
+                // 1. Fetch Project Details
+                const projectRes = await apiClient.get(`/projects/${pId}`);
+                const projectData = projectRes.data;
+
+                // Default values
+                let owner = 'user';
+                let repo = 'repo';
+
+                // Attempt to parse from project.github_repo_url
+                // This handles cases where github_configurations table might be empty but project table has the URL
+                if (projectData.github_repo_url) {
+                    try {
+                        // Handle standard formats:
+                        // https://github.com/Owner/Repo.git
+                        // https://github.com/Owner/Repo
+                        // git@github.com:Owner/Repo.git
+                        const url = projectData.github_repo_url;
+                        const cleanUrl = url.replace(/\.git$/, '').replace(/\/$/, '');
+                        const parts = cleanUrl.split(/[\/:/]/); // Split by / or :
+
+                        // Look for last two parts
+                        if (parts.length >= 2) {
+                            const potentialRepo = parts[parts.length - 1];
+                            const potentialOwner = parts[parts.length - 2];
+
+                            if (potentialRepo && potentialOwner && potentialOwner !== 'github.com') {
+                                owner = potentialOwner;
+                                repo = potentialRepo;
+                            }
                         }
+                    } catch (e) {
+                        console.warn("Failed to parse github_repo_url", e);
                     }
-                } catch (error) {
-                    console.error("Failed to fetch task details", error);
-                    toast.error("Could not load task details");
                 }
-            };
-            fetchTaskDetails();
-        }
+
+                // 2. Fetch GitHub Config (if exists) -> OVERRIDES parsed URL data if available
+                try {
+                    const githubRes = await apiClient.get(`/github/config/${pId}`);
+                    if (githubRes.data) {
+                        owner = githubRes.data.repoOwner;
+                        repo = githubRes.data.repoName;
+                    }
+                } catch (e) {
+                    // Ignore if no github config
+                }
+
+                setProject(prev => prev ? {
+                    ...prev,
+                    projectName: projectData.name,
+                    owner: owner,
+                    repository: repo
+                } : undefined);
+
+                // 3. Fetch Task Details if taskId is present
+                if (tId) {
+                    const taskRes = await apiClient.get(`/projects/${pId}/tasks/${tId}`);
+                    if (taskRes.data) {
+                        setTaskDescription(taskRes.data.description || 'No description available for this task.');
+                        setTask(taskRes.data);
+                    }
+                }
+
+            } catch (error) {
+                console.error("Failed to load project data", error);
+                toast.error("Could not load project details");
+            }
+        };
+
+        fetchData();
 
     }, [searchParams]);
+
+    // Sync content
+    useEffect(() => {
+        setSpecContent(selectedSpec?.content || '');
+    }, [selectedSpec]);
 
     // Handlers
 
@@ -232,12 +283,52 @@ function EditorContent() {
             {/* Header (Simplified if reusing main layout, but for standalone editor page) */}
             <header className="bg-white border-b border-gray-200 px-4 py-2 flex items-center justify-between z-10">
                 <div className="flex items-center gap-2">
+                    {taskId && (
+                        <button
+                            onClick={() => router.back()}
+                            className="mr-2 flex items-center gap-1 text-gray-500 hover:text-gray-900 transition-colors text-sm font-medium"
+                            title="Back to Task"
+                        >
+                            <ArrowLeft className="w-4 h-4" />
+                            <span className="hidden sm:inline">Back</span>
+                        </button>
+                    )}
                     <span className="font-bold text-gray-700 text-lg">OpenSpec Editor</span>
-                    {project?.projectName && (
-                        <span className="text-gray-400 text-sm">/ {project.projectName}</span>
+                    <span className="text-gray-500 text-sm font-medium ml-1">
+                        {project?.projectName ? `/${project.projectName}` : ''}
+                        {task?.title ? `/${task.title}` : ''}
+                    </span>
+                    {task?.status && (
+                        <span className="ml-2 px-2.5 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-800">
+                            {typeof task.status === 'string' ? task.status : 'pending'}
+                        </span>
                     )}
                 </div>
-                {/* Could add user profile here if not in main layout */}
+
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => handleSaveSpec(specContent)}
+                        disabled={!selectedSpecId || isLoading}
+                        className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <Save className="w-4 h-4" />
+                        Save
+                    </button>
+                    <button
+                        onClick={() => typeof window !== 'undefined' && window.print()}
+                        className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                    >
+                        <Download className="w-4 h-4" />
+                        Export
+                    </button>
+                    <button
+                        onClick={() => toast.info('Invite feature coming soon')}
+                        className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                    >
+                        <UserPlus className="w-4 h-4" />
+                        Invite
+                    </button>
+                </div>
             </header>
 
             {/* Main Content */}
@@ -251,7 +342,8 @@ function EditorContent() {
 
                 <Editor
                     specification={selectedSpec}
-                    onSave={handleSaveSpec}
+                    content={specContent}
+                    onContentChange={setSpecContent}
                     onGenerateSuggestions={handleGenerateSuggestions}
                     suggestions={suggestions}
                     isLoading={isLoading}
@@ -259,10 +351,10 @@ function EditorContent() {
 
                 <Dashboard
                     project={project}
+                    task={task}
                     taskDescription={taskDescription}
                     onProjectChange={handleProjectChange}
                     onGenerateCode={() => setShowGenerateModal(true)}
-                    onExport={() => typeof window !== 'undefined' && window.print()} // Placeholder
                     onOpenTerminal={() => setShowTerminal(true)}
                     isGenerating={isGenerating}
                     isReadOnly={!!taskId}

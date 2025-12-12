@@ -162,69 +162,48 @@ export default function ProjectDetailPage({ params }: { params: { projectId: str
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <Link
-                href="/dashboard"
-                className="text-gray-600 hover:text-gray-900 transition"
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </Link>
-              <div>
-                <div className="flex items-center space-x-3">
-                  <h1 className="text-2xl font-bold text-gray-900">{project.name}</h1>
-                  {project.jiraProjectKey && (
-                    <a
-                      href={`${project.jiraProjectKey.startsWith('http') ? project.jiraProjectKey : `https://jira.com/browse/${project.jiraProjectKey}`}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800"
-                    >
-                      Jira
-                      <ExternalLink className="ml-1 h-3.5 w-3.5" />
-                    </a>
-                  )}
-                  {project.githubRepoUrl && (
-                    <a
-                      href={project.githubRepoUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center text-sm text-gray-700 hover:text-gray-900"
-                    >
-                      GitHub
-                      <ExternalLink className="ml-1 h-3.5 w-3.5" />
-                    </a>
-                  )}
-                </div>
-                <p className="text-sm text-gray-600">{project.description}</p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-4">
-              <Link
-                href={`/projects/${projectId}/tasks/new`}
-                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
-              >
-                <Plus className="h-5 w-5 mr-2" />
-                New Task
-              </Link>
-              <Link
-                href={`/projects/${projectId}/settings`}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition"
-              >
-                <Settings className="h-5 w-5 mr-2" />
-                Settings
-              </Link>
-              <NotificationBell />
-              <UserMenu />
-            </div>
-          </div>
+      {/* Header */}
+      <header className="bg-white border-b border-gray-200 px-4 h-14 flex items-center justify-between sticky top-0 z-10">
+        <div className="flex items-center gap-2">
+          <Link
+            href="/dashboard"
+            className="flex items-center gap-1 text-gray-500 hover:text-gray-900 transition-colors text-sm font-medium mr-2"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span className="hidden sm:inline">Back</span>
+          </Link>
+          <span className="font-bold text-gray-700 text-lg">Project</span>
+          <span className="text-gray-500 text-sm font-medium ml-1">
+            /{project.name}
+          </span>
+        </div>
+        <div className="flex items-center space-x-4">
+          <Link
+            href={`/projects/${projectId}/tasks/new`}
+            className="inline-flex items-center px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition"
+          >
+            <Plus className="h-4 w-4 mr-1.5" />
+            New Task
+          </Link>
+          <Link
+            href={`/projects/${projectId}/settings`}
+            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition"
+            title="Settings"
+          >
+            <Settings className="h-5 w-5" />
+          </Link>
+          <NotificationBell />
+          <UserMenu />
         </div>
       </header>
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {project.description && (
+          <div className="mb-6">
+            <p className="text-gray-600">{project.description}</p>
+          </div>
+        )}
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <StatCard
@@ -305,11 +284,10 @@ export default function ProjectDetailPage({ params }: { params: { projectId: str
                             <button
                               key={page}
                               onClick={() => setCurrentPage(page)}
-                              className={`px-3 py-2 text-sm border rounded-md ${
-                                currentPage === page
+                              className={`px-3 py-2 text-sm border rounded-md ${currentPage === page
                                   ? 'bg-blue-600 text-white border-blue-600'
                                   : 'border-gray-300 hover:bg-gray-50'
-                              }`}
+                                }`}
                             >
                               {page}
                             </button>
@@ -425,7 +403,7 @@ function TaskCard({ task, projectId, jiraConfig }: { task: Task; projectId: stri
   // Helper function to get Jira issue URL
   const getJiraIssueUrl = (jiraIssueKey: string, jiraConfig: JiraConfiguration): string | null => {
     if (!jiraConfig?.jiraUrl || !jiraIssueKey) return null
-    
+
     let baseUrl = jiraConfig.jiraUrl.trim()
     baseUrl = baseUrl.replace(/\/$/, '') // Remove trailing slash
     try {
@@ -437,7 +415,7 @@ function TaskCard({ task, projectId, jiraConfig }: { task: Task; projectId: stri
         baseUrl = match[0]
       }
     }
-    
+
     // Construct Jira issue URL
     return `${baseUrl}/browse/${jiraIssueKey}`
   }
@@ -555,14 +533,14 @@ function IntegrationCard({
         baseUrl = match[0]
       }
     }
-    
+
     if (baseUrl.includes('atlassian.net')) {
       return {
         projectList: `${baseUrl}/jira/core/projects/${projectKey}/list?jql=project%20%3D%20%22${projectKey}%22%20ORDER%20BY%20created%20DESC`,
         projectBrowse: `${baseUrl}/browse/${projectKey}`
       }
     }
-    
+
     return {
       projectBrowse: `${baseUrl}/browse/${projectKey}`,
       projectList: `${baseUrl}/browse/${projectKey}`
@@ -577,7 +555,7 @@ function IntegrationCard({
     : null
 
   // Generate GitHub repository URL
-  const githubRepoUrl = githubConfig 
+  const githubRepoUrl = githubConfig
     ? `https://github.com/${githubConfig.repoOwner}/${githubConfig.repoName}`
     : null
 
@@ -612,11 +590,10 @@ function IntegrationCard({
           )}
         </div>
         <span
-          className={`px-2 py-1 text-xs rounded-full ${
-            status === 'connected'
+          className={`px-2 py-1 text-xs rounded-full ${status === 'connected'
               ? 'bg-green-100 text-green-800'
               : 'bg-gray-100 text-gray-800'
-          }`}
+            }`}
         >
           {status === 'connected' ? 'Connected' : 'Not Connected'}
         </span>
@@ -666,13 +643,12 @@ function ReleaseCard({
           </p>
         </div>
         <span
-          className={`px-2 py-1 text-xs rounded-full ${
-            release.risk === 'On Track'
+          className={`px-2 py-1 text-xs rounded-full ${release.risk === 'On Track'
               ? 'bg-green-100 text-green-700'
               : release.risk === 'Shipped'
-              ? 'bg-blue-100 text-blue-700'
-              : 'bg-yellow-100 text-yellow-700'
-          }`}
+                ? 'bg-blue-100 text-blue-700'
+                : 'bg-yellow-100 text-yellow-700'
+            }`}
         >
           {release.risk}
         </span>
@@ -704,8 +680,8 @@ function PipelineCard({
     pipeline.status === 'Running' || pipeline.status === 'Deploying'
       ? 'text-blue-600'
       : pipeline.status === 'Idle'
-      ? 'text-gray-500'
-      : 'text-green-600'
+        ? 'text-gray-500'
+        : 'text-green-600'
 
   return (
     <div className="rounded-lg border border-gray-200 p-4">

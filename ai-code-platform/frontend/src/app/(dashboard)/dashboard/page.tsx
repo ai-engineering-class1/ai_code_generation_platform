@@ -32,20 +32,20 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <div className="flex items-center space-x-4">
-            <Link
-              href="/projects/new"
-              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
-            >
-              <Plus className="h-5 w-5 mr-2" />
-              New Project
-            </Link>
-            <NotificationBell />
-            <UserMenu />
-          </div>
+      <header className="bg-white border-b border-gray-200 px-4 h-14 flex items-center justify-between z-10 sticky top-0">
+        <div className="flex items-center gap-2">
+          <h1 className="text-lg font-bold text-gray-700">Dashboard</h1>
+        </div>
+        <div className="flex items-center space-x-4">
+          <Link
+            href="/projects/new"
+            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition text-sm"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            New Project
+          </Link>
+          <NotificationBell />
+          <UserMenu />
         </div>
       </header>
 

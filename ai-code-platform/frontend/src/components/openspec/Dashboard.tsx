@@ -12,76 +12,125 @@ import {
     Unlock,
     FileText
 } from 'lucide-react';
-import { OpenSpecProject } from '@/lib/types/openspec';
+import { OpenSpecProject, Task } from '@/lib/types/openspec';
 
 interface DashboardProps {
     project?: OpenSpecProject;
-    taskDescription?: string;
+    task?: Task;
+    taskDescription?: string; // Keep for fallback or easier passing if full task obj not available
     onProjectChange: (field: string, value: string | boolean) => void;
     onGenerateCode: () => void;
-    onExport: () => void;
     onOpenTerminal: () => void;
     isGenerating: boolean;
     isReadOnly?: boolean;
+    className?: string;
 }
 
 export default function Dashboard({
     project,
+    task,
     taskDescription,
     onProjectChange,
     onGenerateCode,
-    onExport,
     onOpenTerminal,
     isGenerating,
-    isReadOnly = false
+    isReadOnly = false,
+    className = ''
 }: DashboardProps) {
 
+    // Helper for formatting date
+    const formatDate = (dateString?: string) => {
+        if (!dateString) return 'N/A';
+        return new Date(dateString).toLocaleDateString();
+    };
+
+    const description = task?.description || taskDescription;
+
     return (
-        <aside className="w-72 bg-white border-l border-gray-200 flex flex-col h-full overflow-y-auto">
-            {/* Back to Task Button - Only shown when accessed from Task */}
-            {isReadOnly && (
-                <div className="p-4 pb-0">
-                    <button
-                        onClick={() => window.history.back()}
-                        className="flex items-center gap-2 text-gray-500 hover:text-gray-900 transition-colors text-sm font-medium"
-                        title="Back to Task"
-                    >
-                        <ArrowLeft className="w-4 h-4" />
-                        Back to Task
-                    </button>
+        <aside className={`w-72 bg-white border-l border-gray-200 flex flex-col h-full overflow-y-auto ${className}`}>
+
+            {/* Task Context */}
+            {(task || description) && (
+                <div className="border-b border-gray-200">
+                    <div className="px-4 py-2 bg-gray-50 border-b border-gray-200">
+                        <h3 className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                            <FileText className="w-3 h-3" />
+                            Task
+                        </h3>
+                    </div>
+                    <div className="p-4 space-y-4">
+                        {description && (
+                            <div>
+                                <label className="block text-xs font-medium text-blue-600 mb-1">
+                                    Task Description
+                                </label>
+                                <p className="text-sm text-gray-900 whitespace-pre-wrap max-h-40 overflow-y-auto font-sans">
+                                    {description}
+                                </p>
+                            </div>
+                        )}
+
+                        {task && (
+                            <>
+                                <div>
+                                    <label className="block text-xs font-medium text-blue-600 mb-1">
+                                        Type
+                                    </label>
+                                    <p className="text-sm text-gray-900 capitalize font-sans">
+                                        {task.type}
+                                    </p>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-blue-600 mb-1">
+                                        Priority
+                                    </label>
+                                    <p className={`text-sm font-sans capitalize ${task.priority === 'high' || task.priority === 'critical' ? 'text-red-600' : 'text-gray-900'
+                                        }`}>
+                                        {task.priority || 'Medium'}
+                                    </p>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-blue-600 mb-1">
+                                        Current Stage
+                                    </label>
+                                    <p className="text-sm text-gray-900 capitalize font-sans">
+                                        {task.currentStage ? task.currentStage.replace(/_/g, ' ') : 'N/A'}
+                                    </p>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-blue-600 mb-1">
+                                        Assignee
+                                    </label>
+                                    <p className="text-sm text-gray-900 font-sans">
+                                        {task.assigneeId || 'Unassigned'}
+                                    </p>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-blue-600 mb-1">
+                                        Created Date
+                                    </label>
+                                    <p className="text-sm text-gray-900 font-sans">
+                                        {formatDate(task.createdAt)}
+                                    </p>
+                                </div>
+                            </>
+                        )}
+                    </div>
                 </div>
             )}
 
-            {/* Task Context - Display if task description is provided */}
-            {taskDescription && (
-                <div className="p-4 border-b border-gray-200 bg-blue-50">
-                    <h3 className="flex items-center gap-2 text-sm font-semibold text-blue-800 uppercase tracking-wide mb-2 transition-colors">
-                        <FileText className="w-4 h-4" />
-                        Task Description
-                    </h3>
-                    <p className="text-xs text-gray-700 whitespace-pre-wrap max-h-40 overflow-y-auto">
-                        {taskDescription}
-                    </p>
+            {/* Project Section */}
+            <div className="border-b border-gray-200">
+                <div className="px-4 py-2 bg-gray-50 border-b border-gray-200">
+                    <h4 className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                        <Settings className="w-3 h-3" />
+                        Project
+                    </h4>
                 </div>
-            )}
 
-            <div className="p-4 border-b border-gray-200">
-                <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-600 uppercase tracking-wide">
-                    <Settings className="w-4 h-4" />
-                    Project Details
-                </h3>
-            </div>
-
-            {/* Project Settings */}
-            <div className="p-4 border-b border-gray-200">
-                <h4 className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                    <Settings className="w-3 h-3" />
-                    Configurations
-                </h4>
-
-                <div className="space-y-3">
+                <div className="p-4 space-y-4">
                     <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                        <label className="block text-xs font-medium text-blue-600 mb-1">
                             Project Name
                         </label>
                         <input
@@ -90,12 +139,12 @@ export default function Dashboard({
                             onChange={(e) => onProjectChange('projectName', e.target.value)}
                             placeholder="My Project"
                             disabled={isReadOnly}
-                            className={`w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none ${isReadOnly ? 'bg-gray-100 text-gray-500' : ''}`}
+                            className="w-full py-1 text-sm bg-transparent border-none outline-none focus:ring-0 px-0 text-gray-900 placeholder-gray-400 font-sans disabled:text-gray-500"
                         />
                     </div>
 
                     <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                        <label className="block text-xs font-medium text-blue-600 mb-1">
                             Repository Owner
                         </label>
                         <input
@@ -104,12 +153,12 @@ export default function Dashboard({
                             onChange={(e) => onProjectChange('owner', e.target.value)}
                             placeholder="username"
                             disabled={isReadOnly}
-                            className={`w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none ${isReadOnly ? 'bg-gray-100 text-gray-500' : ''}`}
+                            className="w-full py-1 text-sm bg-transparent border-none outline-none focus:ring-0 px-0 text-gray-900 placeholder-gray-400 font-sans disabled:text-gray-500"
                         />
                     </div>
 
                     <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                        <label className="block text-xs font-medium text-blue-600 mb-1">
                             Repository Name
                         </label>
                         <input
@@ -118,55 +167,22 @@ export default function Dashboard({
                             onChange={(e) => onProjectChange('repository', e.target.value)}
                             placeholder="my-repo"
                             disabled={isReadOnly}
-                            className={`w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none ${isReadOnly ? 'bg-gray-100 text-gray-500' : ''}`}
+                            className="w-full py-1 text-sm bg-transparent border-none outline-none focus:ring-0 px-0 text-gray-900 placeholder-gray-400 font-sans disabled:text-gray-500"
                         />
                     </div>
-
-                    <label className="flex items-center gap-2 text-xs cursor-pointer">
-                        <input
-                            type="checkbox"
-                            checked={project?.isPrivate || false}
-                            onChange={(e) => onProjectChange('isPrivate', e.target.checked)}
-                            disabled={isReadOnly}
-                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
-                        />
-                        <span className="text-gray-700">Private Repository</span>
-                        {project?.isPrivate ? <Lock className="w-3 h-3 text-gray-500" /> : <Unlock className="w-3 h-3 text-gray-500" />}
-                    </label>
-                </div>
-            </div>
-
-            {/* Actions */}
-            <div className="p-4 border-b border-gray-200">
-                <h4 className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                    <Play className="w-3 h-3" />
-                    Actions
-                </h4>
-
-                <div className="space-y-2">
-                    {/* Back to Task Button - Only shown when accessed from Task */}
-
-
-                    <button
-                        onClick={onExport}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
-                    >
-                        <Download className="w-4 h-4" />
-                        Export Project
-                    </button>
-
-
                 </div>
             </div>
 
             {/* Collaboration */}
-            <div className="p-4">
-                <h4 className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                    <Users className="w-3 h-3" />
-                    Collaboration
-                </h4>
+            <div className="border-b border-gray-200">
+                <div className="px-4 py-2 bg-gray-50 border-b border-gray-200">
+                    <h4 className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                        <Users className="w-3 h-3" />
+                        Collaboration
+                    </h4>
+                </div>
 
-                <div className="space-y-3">
+                <div className="p-4 space-y-3">
                     <div className="flex items-center gap-2">
                         <img
                             src={`https://ui-avatars.com/api/?name=${project?.owner || 'User'}&background=405189&color=fff`}
@@ -180,13 +196,8 @@ export default function Dashboard({
                             <span className="block text-[10px] text-gray-500">Owner</span>
                         </div>
                     </div>
-
-                    <button className="flex items-center gap-1 px-2 py-1 text-xs border border-gray-300 text-gray-700 rounded hover:bg-gray-50 transition-colors">
-                        <UserPlus className="w-3 h-3" />
-                        Add Collaborator
-                    </button>
                 </div>
             </div>
-        </aside>
+        </aside >
     );
 }

@@ -15,7 +15,9 @@ import {
     RefreshCw,
     Check,
     X,
-    TerminalSquare
+    TerminalSquare,
+    Download,
+    UserPlus
 } from 'lucide-react';
 import { Specification, Suggestion, TabType } from '@/lib/types/openspec';
 import dynamic from 'next/dynamic';
@@ -24,7 +26,8 @@ const Terminal = dynamic(() => import('@/components/openspec/Terminal'), { ssr: 
 
 interface EditorProps {
     specification?: Specification;
-    onSave: (content: string) => void;
+    content: string;
+    onContentChange: (value: string) => void;
     onGenerateSuggestions: () => void;
     suggestions: Suggestion[];
     isLoading?: boolean;
@@ -32,19 +35,18 @@ interface EditorProps {
 
 export default function Editor({
     specification,
-    onSave,
+    content,
+    onContentChange,
     onGenerateSuggestions,
     suggestions,
     isLoading = false,
 }: EditorProps) {
     const [activeTab, setActiveTab] = useState<TabType>('specification');
-    const [content, setContent] = useState('');
+    // Content state hoisted to parent
 
     const [showTerminal, setShowTerminal] = useState(false);
 
-    useEffect(() => {
-        setContent(specification?.content || '');
-    }, [specification]);
+
 
     const handleToolbarAction = (action: string) => {
         const textarea = document.getElementById('specEditor') as HTMLTextAreaElement;
@@ -76,7 +78,7 @@ export default function Editor({
         }
 
         const newContent = content.substring(0, start) + replacement + content.substring(end);
-        setContent(newContent);
+        onContentChange(newContent);
     };
 
     const renderMarkdownPreview = () => {
@@ -109,7 +111,7 @@ export default function Editor({
     };
 
     const tabs = [
-        { id: 'specification' as TabType, label: 'Specification', icon: FileCode },
+        { id: 'specification' as TabType, label: 'Markdown', icon: FileCode },
         { id: 'preview' as TabType, label: 'Preview', icon: Eye },
         { id: 'suggestions' as TabType, label: 'AI Suggestions', icon: Sparkles },
     ];
@@ -117,17 +119,18 @@ export default function Editor({
     return (
         <section className="flex-1 flex flex-col overflow-hidden bg-white relative">
             {/* Editor Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-                <div className="flex gap-1">
+            <div className="flex items-center justify-between px-4 h-14 border-b border-gray-200 bg-white">
+                <div className="flex items-center h-full gap-6">
                     {tabs.map((tab) => {
                         const Icon = tab.icon;
+                        const isActive = activeTab === tab.id;
                         return (
                             <button
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
-                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === tab.id
-                                    ? 'bg-blue-600 text-white'
-                                    : 'text-gray-600 hover:bg-gray-100'
+                                className={`flex items-center gap-2 h-full px-1 text-sm font-medium transition-colors border-b-2 ${isActive
+                                    ? 'border-blue-600 text-blue-600'
+                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                                     }`}
                             >
                                 <Icon className="w-4 h-4" />
@@ -137,16 +140,7 @@ export default function Editor({
                     })}
                 </div>
 
-                <div className="flex gap-2">
-                    <button
-                        onClick={() => onSave(content)}
-                        disabled={!specification || isLoading}
-                        className="flex items-center gap-2 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        <Save className="w-4 h-4" />
-                        Save
-                    </button>
-                </div>
+                {/* Right side buttons moved to Page Header */}
             </div>
 
             {/* Editor Content */}
@@ -181,7 +175,7 @@ export default function Editor({
                         <textarea
                             id="specEditor"
                             value={content}
-                            onChange={(e) => setContent(e.target.value)}
+                            onChange={(e) => onContentChange(e.target.value)}
                             placeholder="Select a specification from the left panel to edit..."
                             className="flex-1 p-4 font-mono text-sm resize-none border-none outline-none focus:ring-0"
                             spellCheck={false}

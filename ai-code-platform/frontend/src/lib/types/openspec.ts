@@ -45,7 +45,13 @@ export interface TaskStatus {
 export interface Task {
     id: string;
     projectId: string;
-    status: TaskStatus;
+    title?: string;
+    description?: string;
+    type?: string;
+    priority?: string;
+    currentStage?: string;
+    assigneeId?: string;
+    status: TaskStatus | string; // Allow string as well since backend might return simple status string
     createdAt: string;
     updatedAt: string;
 }
