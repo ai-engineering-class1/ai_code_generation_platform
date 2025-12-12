@@ -65,6 +65,24 @@ export default function TaskDetailPage({
     currentStage: '',
   })
 
+  // Pagination for Activity Log
+  const [activityPage, setActivityPage] = useState(1)
+  const activityPerPage = 5
+
+  const mockActivities = [
+    { id: 1, date: "2025-12-11 15:30:02", user: "Victor", comment: "analyzed the error log" },
+    { id: 2, date: "2025-12-10 11:20:03", user: "GitHub CI Action", comment: "CI error xxx using a", link: "#", linkLabel: "GitHub link" },
+    { id: 3, date: "2025-12-10 11:20:02", user: "Vicor", comment: "Fixed the issue" },
+    { id: 4, date: "2025-12-09 10:30:02", user: "Tom", comment: "Found an issue xxx with a", link: "#", linkLabel: "Jira link" },
+    // Adding more mock data to demonstrate pagination if needed
+    { id: 5, date: "2025-12-08 14:00:00", user: "Alice", comment: "Checked requirements" },
+    { id: 6, date: "2025-12-08 09:15:00", user: "Bob", comment: "Created initial task" },
+  ]
+
+  const totalActivityCount = mockActivities.length
+  const totalActivityPages = Math.ceil(totalActivityCount / activityPerPage)
+  const paginatedActivities = mockActivities.slice((activityPage - 1) * activityPerPage, activityPage * activityPerPage)
+
   const { data: task, isLoading, error } = useQuery<TaskDetail>({
     queryKey: ['task', projectId, taskId],
     queryFn: async () => {
@@ -577,32 +595,65 @@ export default function TaskDetailPage({
             )}
 
             {/* Mock Activity Log */}
-            <div className="space-y-4 pt-6 border-t border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">Activity Log</h2>
-              {[
-                { id: 1, date: "2025-12-11 15:30:02", user: "Victor", comment: "analyzed the error log" },
-                { id: 2, date: "2025-12-10 11:20:03", user: "GitHub CI Action", comment: "CI error xxx using a", link: "#", linkLabel: "GitHub link" },
-                { id: 3, date: "2025-12-10 11:20:02", user: "Vicor", comment: "Fixed the issue" },
-                { id: 4, date: "2025-12-09 10:30:02", user: "Tom", comment: "Found an issue xxx with a", link: "#", linkLabel: "Jira link" },
-              ].map((activity) => (
-                <div key={activity.id} className="bg-white rounded-lg shadow p-4 border border-gray-100">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-medium text-blue-600 flex items-center gap-2">
-                      <User className="w-3 h-3" />
-                      {activity.user}
-                    </span>
-                    <span className="text-xs text-gray-500">{activity.date}</span>
+            {/* Activity Log */}
+            <div className="bg-white rounded-lg shadow mt-6">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h2 className="text-lg font-semibold text-gray-900">Activity Log</h2>
+              </div>
+              <div className="p-6 space-y-4">
+                {paginatedActivities.map((activity) => (
+                  <div key={activity.id} className="block border border-gray-200 rounded-lg p-4 hover:border-blue-500 transition">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-medium text-blue-600 flex items-center gap-2">
+                        <User className="w-3 h-3" />
+                        {activity.user}
+                      </span>
+                      <span className="text-xs text-gray-500">{activity.date}</span>
+                    </div>
+                    <p className="text-gray-700 text-sm">
+                      {activity.comment}
+                      {activity.link && (
+                        <a href={activity.link} className="ml-1 text-blue-500 hover:underline">
+                          {activity.linkLabel}
+                        </a>
+                      )}
+                    </p>
                   </div>
-                  <p className="text-gray-700 text-sm">
-                    {activity.comment}
-                    {activity.link && (
-                      <a href={activity.link} className="ml-1 text-blue-500 hover:underline">
-                        {activity.linkLabel}
-                      </a>
-                    )}
-                  </p>
+                ))}
+              </div>
+              {/* Pagination Footer */}
+              {totalActivityPages > 1 && (
+                <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+                  <div className="text-sm text-gray-500">
+                    Showing {(activityPage - 1) * activityPerPage + 1} to {Math.min(activityPage * activityPerPage, totalActivityCount)} of {totalActivityCount}
+                  </div>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => setActivityPage((p) => Math.max(1, p - 1))}
+                      disabled={activityPage === 1}
+                      className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      Previous
+                    </button>
+                    {Array.from({ length: totalActivityPages }, (_, i) => i + 1).map((p) => (
+                      <button
+                        key={p}
+                        onClick={() => setActivityPage(p)}
+                        className={`px-3 py-1 text-sm border rounded-md ${activityPage === p ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 hover:bg-gray-50'}`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setActivityPage((p) => Math.min(totalActivityPages, p + 1))}
+                      disabled={activityPage === totalActivityPages}
+                      className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      Next
+                    </button>
+                  </div>
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </div>

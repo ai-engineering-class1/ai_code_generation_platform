@@ -80,18 +80,12 @@ function EditorContent() {
                 let repo = 'repo';
 
                 // Attempt to parse from project.github_repo_url
-                // This handles cases where github_configurations table might be empty but project table has the URL
                 if (projectData.github_repo_url) {
                     try {
-                        // Handle standard formats:
-                        // https://github.com/Owner/Repo.git
-                        // https://github.com/Owner/Repo
-                        // git@github.com:Owner/Repo.git
                         const url = projectData.github_repo_url;
                         const cleanUrl = url.replace(/\.git$/, '').replace(/\/$/, '');
                         const parts = cleanUrl.split(/[\/:/]/); // Split by / or :
 
-                        // Look for last two parts
                         if (parts.length >= 2) {
                             const potentialRepo = parts[parts.length - 1];
                             const potentialOwner = parts[parts.length - 2];
@@ -106,17 +100,7 @@ function EditorContent() {
                     }
                 }
 
-                // 2. Fetch GitHub Config (if exists) -> OVERRIDES parsed URL data if available
-                try {
-                    const githubRes = await apiClient.get(`/github/config/${pId}`);
-                    if (githubRes.data) {
-                        owner = githubRes.data.repoOwner;
-                        repo = githubRes.data.repoName;
-                    }
-                } catch (e) {
-                    // Ignore if no github config
-                }
-
+                // IMMEDIATE UPDATE: Show sidebar with parsed data
                 setProject(prev => prev ? {
                     ...prev,
                     projectName: projectData.name,
@@ -124,13 +108,33 @@ function EditorContent() {
                     repository: repo
                 } : undefined);
 
-                // 3. Fetch Task Details if taskId is present
+                // 2. Fetch Tasks (Parallel-ish)
                 if (tId) {
-                    const taskRes = await apiClient.get(`/projects/${pId}/tasks/${tId}`);
-                    if (taskRes.data) {
-                        setTaskDescription(taskRes.data.description || 'No description available for this task.');
-                        setTask(taskRes.data);
+                    // Don't await strictly for the UI update above, but we can await here for sequential logic if needed
+                    // Using promise to let it run
+                    apiClient.get(`/projects/${pId}/tasks/${tId}`)
+                        .then(taskRes => {
+                            if (taskRes.data) {
+                                setTaskDescription(taskRes.data.description || 'No description available for this task.');
+                                setTask(taskRes.data);
+                            }
+                        })
+                        .catch(err => console.error("Failed to load task", err));
+                }
+
+                // 3. Fetch GitHub Config (Background Update)
+                try {
+                    const githubRes = await apiClient.get(`/github/config/${pId}`);
+                    if (githubRes.data) {
+                        // Update with authoritative config
+                        setProject(prev => prev ? {
+                            ...prev,
+                            owner: githubRes.data.repoOwner,
+                            repository: githubRes.data.repoName
+                        } : undefined);
                     }
+                } catch (e) {
+                    // Ignore if no github config
                 }
 
             } catch (error) {

@@ -7,6 +7,8 @@ import Link from 'next/link'
 import { ArrowLeft, Settings, Plus, Activity, CheckCircle2, CalendarDays, Clock9, PlayCircle, Rocket, ExternalLink } from 'lucide-react'
 import apiClient from '@/lib/api'
 import { Project, Task, ProjectProgress, JiraConfiguration, GitHubConfiguration } from '@/types'
+import { OpenSpecProject } from '@/lib/types/openspec'
+import Dashboard from '@/components/openspec/Dashboard'
 import UserMenu from '@/components/UserMenu'
 import NotificationBell from '@/components/NotificationBell'
 
@@ -160,7 +162,7 @@ export default function ProjectDetailPage({ params }: { params: { projectId: str
   ]
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="flex flex-col h-screen overflow-hidden bg-gray-50">
       {/* Header */}
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-4 h-14 flex items-center justify-between sticky top-0 z-10">
@@ -198,188 +200,221 @@ export default function ProjectDetailPage({ params }: { params: { projectId: str
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {project.description && (
-          <div className="mb-6">
-            <p className="text-gray-600">{project.description}</p>
-          </div>
-        )}
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <StatCard
-            title="Total Tasks"
-            value={tasks?.length || 0}
-            icon={<Activity className="h-6 w-6 text-blue-600" />}
-          />
-          <StatCard
-            title="In Progress"
-            value={tasks?.filter(t => t.status === 'in_progress').length || 0}
-            icon={<Activity className="h-6 w-6 text-yellow-600" />}
-          />
-          <StatCard
-            title="Completed"
-            value={tasks?.filter(t => t.status === 'completed').length || 0}
-            icon={<CheckCircle2 className="h-6 w-6 text-green-600" />}
-          />
-          <StatCard
-            title="Failed"
-            value={tasks?.filter(t => t.status === 'failed').length || 0}
-            icon={<Activity className="h-6 w-6 text-red-600" />}
-          />
-        </div>
+      <main className="flex-1 flex flex-row overflow-hidden">
+        <div className="flex-1 overflow-y-auto bg-gray-50 p-6">
+          <div className="max-w-5xl mx-auto space-y-6">
 
-        {/* Tasks Section */}
-        <div className="bg-white rounded-lg shadow mb-8">
-          <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">Tasks</h2>
-            {tasks && tasks.length > 0 && (
-              <div className="flex items-center space-x-4">
-                <span className="text-sm text-gray-600">
-                  Showing {startIndex + 1}-{Math.min(endIndex, totalTasks)} of {totalTasks}
-                </span>
-                <select
-                  value={itemsPerPage}
-                  onChange={(e) => {
-                    setItemsPerPage(Number(e.target.value))
-                    setCurrentPage(1)
-                  }}
-                  className="text-sm border border-gray-300 rounded-md px-2 py-1"
-                >
-                  <option value={5}>5 per page</option>
-                  <option value={10}>10 per page</option>
-                  <option value={20}>20 per page</option>
-                  <option value={50}>50 per page</option>
-                </select>
-              </div>
-            )}
-          </div>
-          <div className="p-6">
-            {tasksLoading ? (
-              <p className="text-center text-gray-500">Loading tasks...</p>
-            ) : tasks && tasks.length > 0 ? (
-              <>
-                <div className="space-y-4">
-                  {paginatedTasks.map((task) => (
-                    <TaskCard key={task.id} task={task} projectId={projectId} jiraConfig={jiraConfig} />
-                  ))}
-                </div>
-                {totalPages > 1 && (
-                  <div className="mt-6 flex items-center justify-center space-x-2">
-                    <button
-                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                      disabled={currentPage === 1}
-                      className="px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+
+
+            {/* Tasks Section */}
+            <div className="bg-white rounded-lg shadow mb-8">
+              <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-gray-900">Tasks</h2>
+                {tasks && tasks.length > 0 && (
+                  <div className="flex items-center space-x-4">
+                    <span className="text-sm text-gray-600">
+                      Showing {startIndex + 1}-{Math.min(endIndex, totalTasks)} of {totalTasks}
+                    </span>
+                    <select
+                      value={itemsPerPage}
+                      onChange={(e) => {
+                        setItemsPerPage(Number(e.target.value))
+                        setCurrentPage(1)
+                      }}
+                      className="text-sm border border-gray-300 rounded-md px-2 py-1"
                     >
-                      Previous
-                    </button>
-                    <div className="flex items-center space-x-1">
-                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
-                        // Show first page, last page, current page, and pages around current
-                        if (
-                          page === 1 ||
-                          page === totalPages ||
-                          (page >= currentPage - 1 && page <= currentPage + 1)
-                        ) {
-                          return (
-                            <button
-                              key={page}
-                              onClick={() => setCurrentPage(page)}
-                              className={`px-3 py-2 text-sm border rounded-md ${currentPage === page
-                                  ? 'bg-blue-600 text-white border-blue-600'
-                                  : 'border-gray-300 hover:bg-gray-50'
-                                }`}
-                            >
-                              {page}
-                            </button>
-                          )
-                        } else if (page === currentPage - 2 || page === currentPage + 2) {
-                          return <span key={page} className="px-2 text-gray-500">...</span>
-                        }
-                        return null
-                      })}
-                    </div>
-                    <button
-                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                      disabled={currentPage === totalPages}
-                      className="px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Next
-                    </button>
+                      <option value={5}>5 per page</option>
+                      <option value={10}>10 per page</option>
+                      <option value={20}>20 per page</option>
+                      <option value={50}>50 per page</option>
+                    </select>
                   </div>
                 )}
-              </>
-            ) : (
-              <div className="text-center py-12">
-                <p className="text-gray-500 mb-4">No tasks yet</p>
-                <Link
-                  href={`/projects/${projectId}/tasks/new`}
-                  className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
-                >
-                  <Plus className="h-5 w-5 mr-2" />
-                  Create First Task
-                </Link>
               </div>
-            )}
+              <div className="p-6">
+                {tasksLoading ? (
+                  <p className="text-center text-gray-500">Loading tasks...</p>
+                ) : tasks && tasks.length > 0 ? (
+                  <>
+                    <div className="space-y-4">
+                      {paginatedTasks.map((task) => (
+                        <TaskCard key={task.id} task={task} projectId={projectId} jiraConfig={jiraConfig} />
+                      ))}
+                    </div>
+                    {totalPages > 1 && (
+                      <div className="mt-6 flex items-center justify-center space-x-2">
+                        <button
+                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                          disabled={currentPage === 1}
+                          className="px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Previous
+                        </button>
+                        <div className="flex items-center space-x-1">
+                          {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
+                            // Show first page, last page, current page, and pages around current
+                            if (
+                              page === 1 ||
+                              page === totalPages ||
+                              (page >= currentPage - 1 && page <= currentPage + 1)
+                            ) {
+                              return (
+                                <button
+                                  key={page}
+                                  onClick={() => setCurrentPage(page)}
+                                  className={`px-3 py-2 text-sm border rounded-md ${currentPage === page
+                                    ? 'bg-blue-600 text-white border-blue-600'
+                                    : 'border-gray-300 hover:bg-gray-50'
+                                    }`}
+                                >
+                                  {page}
+                                </button>
+                              )
+                            } else if (page === currentPage - 2 || page === currentPage + 2) {
+                              return <span key={page} className="px-2 text-gray-500">...</span>
+                            }
+                            return null
+                          })}
+                        </div>
+                        <button
+                          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                          disabled={currentPage === totalPages}
+                          className="px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-center py-12">
+                    <p className="text-gray-500 mb-4">No tasks yet</p>
+                    <Link
+                      href={`/projects/${projectId}/tasks/new`}
+                      className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
+                    >
+                      <Plus className="h-5 w-5 mr-2" />
+                      Create First Task
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </div>
+
+
+            {/* Releases */}
+            <div className="bg-white rounded-lg shadow mb-8">
+              <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-gray-900">Release Plan</h2>
+                <p className="text-sm text-gray-500">Track upcoming and historical releases</p>
+              </div>
+              <div className="p-6 space-y-4">
+                {releases.map((release) => (
+                  <ReleaseCard key={release.id} release={release} totalTasks={totalTasks} />
+                ))}
+              </div>
+            </div>
+
+            {/* CI/CD */}
+            <section className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-white rounded-lg shadow p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold text-gray-900">CI Pipelines</h2>
+                  <PlayCircle className="h-5 w-5 text-blue-600" />
+                </div>
+                <div className="space-y-4">
+                  {ciPipelines.map((pipeline) => (
+                    <PipelineCard key={pipeline.name} pipeline={pipeline} type="ci" />
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg shadow p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold text-gray-900">CD Pipelines</h2>
+                  <Rocket className="h-5 w-5 text-indigo-600" />
+                </div>
+                <div className="space-y-4">
+                  {cdPipelines.map((pipeline) => (
+                    <PipelineCard key={pipeline.name} pipeline={pipeline} type="cd" />
+                  ))}
+                </div>
+              </div>
+            </section>
+
           </div>
         </div>
 
-        {/* Integration Status */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <IntegrationCard
-            title="Jira Integration"
-            status={jiraConfig && jiraConfig.jiraUrl && jiraConfig.jiraUrl.trim() ? 'connected' : 'not_connected'}
-            projectKey={project.jiraProjectKey}
-            projectId={projectId}
-            jiraConfig={jiraConfig}
-          />
-          <IntegrationCard
-            title="GitHub Integration"
-            status={project.githubRepoUrl ? 'connected' : 'not_connected'}
-            repoUrl={project.githubRepoUrl}
-            projectId={projectId}
-            githubConfig={githubConfig}
-          />
-        </div>
-        {/* Releases */}
-        <section className="mt-8 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">Release Plan</h2>
-            <p className="text-sm text-gray-500">Track upcoming and historical releases</p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {releases.map((release) => (
-              <ReleaseCard key={release.id} release={release} totalTasks={totalTasks} />
-            ))}
-          </div>
-        </section>
-
-        {/* CI/CD */}
-        <section className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">CI Pipelines</h2>
-              <PlayCircle className="h-5 w-5 text-blue-600" />
+        <Dashboard
+          project={project ? {
+            id: projectId,
+            projectName: project.name,
+            owner: (project.github_repo_url || project.githubRepoUrl || '').split('/')[3] || 'user',
+            repository: (project.github_repo_url || project.githubRepoUrl || '').split('/')[4]?.replace('.git', '') || 'repo',
+            createdAt: project.createdAt || '',
+            updatedAt: project.updatedAt || '',
+            isPrivate: false,
+            specTree: []
+          } as OpenSpecProject : undefined}
+          task={undefined}
+          taskDescription=""
+          onProjectChange={() => { }}
+          onGenerateCode={() => { }}
+          onOpenTerminal={() => { }}
+          isGenerating={false}
+          isReadOnly={true}
+          showCollaboration={false}
+          className="w-80 flex-shrink-0 !border-l border-gray-200 !h-full bg-white"
+        >
+          <div className="border-b border-gray-200">
+            <div className="px-4 py-2 bg-gray-50 border-b border-gray-200">
+              <h4 className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                <Activity className="w-3 h-3" />
+                Statistic
+              </h4>
             </div>
-            <div className="space-y-4">
-              {ciPipelines.map((pipeline) => (
-                <PipelineCard key={pipeline.name} pipeline={pipeline} type="ci" />
-              ))}
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">CD Pipelines</h2>
-              <Rocket className="h-5 w-5 text-indigo-600" />
-            </div>
-            <div className="space-y-4">
-              {cdPipelines.map((pipeline) => (
-                <PipelineCard key={pipeline.name} pipeline={pipeline} type="cd" />
-              ))}
+            <div className="p-4 space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-blue-600 mb-1">Total Tasks</label>
+                <p className="text-sm text-gray-900 font-sans font-medium">{tasks?.length || 0}</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-blue-600 mb-1">In Progress</label>
+                <p className="text-sm text-gray-900 font-sans font-medium">{tasks?.filter(t => t.status === 'in_progress').length || 0}</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-blue-600 mb-1">Completed</label>
+                <p className="text-sm text-gray-900 font-sans font-medium">{tasks?.filter(t => t.status === 'completed').length || 0}</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-blue-600 mb-1">Failed</label>
+                <p className="text-sm text-gray-900 font-sans font-medium">{tasks?.filter(t => t.status === 'failed').length || 0}</p>
+              </div>
             </div>
           </div>
-        </section>
-
+          <div className="border-b border-gray-200">
+            <div className="px-4 py-2 bg-gray-50 border-b border-gray-200">
+              <h4 className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                <ExternalLink className="w-3 h-3" />
+                Integration
+              </h4>
+            </div>
+            <div className="p-4 space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-blue-600 mb-1">Jira</label>
+                <p className={`text-sm font-sans font-medium ${(jiraConfig && jiraConfig.jiraUrl && jiraConfig.jiraUrl.trim()) ? 'text-green-600' : 'text-gray-500'}`}>
+                  {(jiraConfig && jiraConfig.jiraUrl && jiraConfig.jiraUrl.trim()) ? 'Connected' : 'Not Connected'}
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-blue-600 mb-1">GitHub</label>
+                <p className={`text-sm font-sans font-medium ${project.githubRepoUrl ? 'text-green-600' : 'text-gray-500'}`}>
+                  {project.githubRepoUrl ? 'Connected' : 'Not Connected'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </Dashboard>
       </main>
     </div>
   )
@@ -591,8 +626,8 @@ function IntegrationCard({
         </div>
         <span
           className={`px-2 py-1 text-xs rounded-full ${status === 'connected'
-              ? 'bg-green-100 text-green-800'
-              : 'bg-gray-100 text-gray-800'
+            ? 'bg-green-100 text-green-800'
+            : 'bg-gray-100 text-gray-800'
             }`}
         >
           {status === 'connected' ? 'Connected' : 'Not Connected'}
@@ -633,7 +668,7 @@ function ReleaseCard({
   const progress = totalTasks ? Math.round((release.ready / Math.max(release.scope, 1)) * 100) : 0
 
   return (
-    <div className="bg-white rounded-lg shadow p-6 space-y-4">
+    <div className="block border border-gray-200 rounded-lg p-4 space-y-4 hover:border-blue-500 transition">
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold text-gray-900">{release.title}</h3>
@@ -644,10 +679,10 @@ function ReleaseCard({
         </div>
         <span
           className={`px-2 py-1 text-xs rounded-full ${release.risk === 'On Track'
-              ? 'bg-green-100 text-green-700'
-              : release.risk === 'Shipped'
-                ? 'bg-blue-100 text-blue-700'
-                : 'bg-yellow-100 text-yellow-700'
+            ? 'bg-green-100 text-green-700'
+            : release.risk === 'Shipped'
+              ? 'bg-blue-100 text-blue-700'
+              : 'bg-yellow-100 text-yellow-700'
             }`}
         >
           {release.risk}
