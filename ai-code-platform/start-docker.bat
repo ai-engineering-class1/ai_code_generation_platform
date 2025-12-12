@@ -154,7 +154,7 @@ echo.
 echo %BLUE%1. Start Backend (Terminal 1):%NC%
 echo    cd backend
 echo    venv\Scripts\activate
-echo    uvicorn app.main:app --reload --host 0.0.0.0 --port 8082
+echo    uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 echo.
 echo %BLUE%2. Start Frontend (Terminal 2):%NC%
@@ -164,8 +164,8 @@ echo    npm run dev
 echo.
 echo %BLUE%3. Access the application:%NC%
 echo    Frontend: %GREEN%http://localhost:3012%NC%
-echo    Backend:  %GREEN%http://localhost:8082%NC%
-echo    API Docs: %GREEN%http://localhost:8082/docs%NC%
+echo    Backend:  %GREEN%http://localhost:8000%NC%
+echo    API Docs: %GREEN%http://localhost:8000/docs%NC%
 
 echo.
 echo %CYAN%Docker Management Commands:%NC%

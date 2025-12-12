@@ -166,7 +166,7 @@ if __name__ == "__main__":
         create_test_data()
         print("\n✅ SUCCESS! Database is ready.\n")
         print("Next steps:")
-        print("1. Start backend:  cd backend && source venv/bin/activate && uvicorn app.main:app --reload --host 0.0.0.0 --port 8082")
+        print("1. Start backend:  cd backend && source venv/bin/activate && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000")
         print("2. Start frontend: cd frontend && npm run dev")
         print("3. Open browser:   http://localhost:3012\n")
     except Exception as e:

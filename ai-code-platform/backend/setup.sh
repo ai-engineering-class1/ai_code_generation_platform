@@ -55,7 +55,7 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/ai_code_platform
 
 # Server
 HOST=0.0.0.0
-PORT=8082
+PORT=8000
 
 # Security
 SECRET_KEY=test-secret-key-for-development-only-change-in-production
@@ -76,14 +76,14 @@ ANTHROPIC_API_KEY=
 GITHUB_TOKEN=
 JIRA_API_TOKEN=
 EOF
-    echo -e "${GREEN}✓ .env file created with PORT=8082${NC}"
+    echo -e "${GREEN}✓ .env file created with PORT=8000${NC}"
     echo -e "${YELLOW}⚠️  Please edit .env to add your API keys for full functionality${NC}"
 else
     echo -e "${GREEN}✓ .env file already exists${NC}"
     # Check if PORT is set in .env
     if ! grep -q "^PORT=" .env; then
-        echo "PORT=8082" >> .env
-        echo -e "${GREEN}✓ Added PORT=8082 to .env${NC}"
+        echo "PORT=8000" >> .env
+        echo -e "${GREEN}✓ Added PORT=8000 to .env${NC}"
     fi
 fi
 
@@ -157,10 +157,10 @@ echo ""
 echo "2. Start Redis if not running:"
 echo "   redis-server"
 echo ""
-echo "3. Run the server on port 8082:"
+echo "3. Run the server on port 8000:"
 echo "   source venv/bin/activate"
-echo "   uvicorn app.main:app --reload --host 0.0.0.0 --port 8082"
+echo "   uvicorn app.main:app --reload --host 0.0.0.0 --port 8000"
 echo ""
 echo "4. Access the API:"
-echo "   http://localhost:8082"
-echo "   http://localhost:8082/docs (API documentation)"
+echo "   http://localhost:8000"
+echo "   http://localhost:8000/docs (API documentation)"

@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     
     # Server
     HOST: str = "0.0.0.0"
-    PORT: int = 8082
+    PORT: int = 8000
     
     # Database
     DATABASE_URL: str

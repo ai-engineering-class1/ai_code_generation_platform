@@ -190,12 +190,12 @@ echo %CYAN%You need to open %YELLOW%3 terminal windows%CYAN%:%NC%
 echo.
 
 echo %YELLOW%═══════════════════════════════════════════════════════════%NC%
-echo %YELLOW%Terminal 1 - Backend (Port 8082)%NC%
+echo %YELLOW%Terminal 1 - Backend (Port 8000)%NC%
 echo %YELLOW%═══════════════════════════════════════════════════════════%NC%
 echo Run these commands:
 echo %GREEN%cd %PROJECT_ROOT%\backend%NC%
 echo %GREEN%venv\Scripts\activate%NC%
-echo %GREEN%uvicorn app.main:app --reload --host 0.0.0.0 --port 8082%NC%
+echo %GREEN%uvicorn app.main:app --reload --host 0.0.0.0 --port 8000%NC%
 echo.
 echo Or simply:
 echo %GREEN%cd %PROJECT_ROOT%\backend ^&^& start.bat%NC%
@@ -216,8 +216,8 @@ echo %YELLOW%══════════════════════�
 echo.
 echo %CYAN%After starting both servers:%NC%
 echo   Frontend: %GREEN%http://localhost:3000%NC%
-echo   Backend:  %GREEN%http://localhost:8082%NC%
-echo   API Docs: %GREEN%http://localhost:8082/docs%NC%
+echo   Backend:  %GREEN%http://localhost:8000%NC%
+echo   API Docs: %GREEN%http://localhost:8000/docs%NC%
 
 echo.
 echo %CYAN%Login Credentials:%NC%
@@ -235,7 +235,7 @@ echo.
 echo %BLUE%1.%NC% Open a new terminal and run:
 echo    %GREEN%cd %PROJECT_ROOT%\backend%NC%
 echo    %GREEN%venv\Scripts\activate%NC%
-echo    %GREEN%uvicorn app.main:app --reload --host 0.0.0.0 --port 8082%NC%
+echo    %GREEN%uvicorn app.main:app --reload --host 0.0.0.0 --port 8000%NC%
 
 echo.
 echo %BLUE%2.%NC% Open another terminal and run:
@@ -256,7 +256,7 @@ echo    Password: %GREEN%testpassword123%NC%
 
 echo.
 echo %CYAN%Troubleshooting:%NC%
-echo   - If port 8082 is in use: %GREEN%netstat -ano ^| findstr :8082%NC% (then kill the PID)
+echo   - If port 8000 is in use: %GREEN%netstat -ano ^| findstr :8000%NC% (then kill the PID)
 echo   - If port 3000 is in use: %GREEN%netstat -ano ^| findstr :3000%NC% (then kill the PID)
 echo   - Check backend logs for errors in Terminal 1
 echo   - Check frontend logs for errors in Terminal 2

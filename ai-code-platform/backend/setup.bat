@@ -76,7 +76,7 @@ if not exist ".env" (
         echo.
         echo # Server
         echo HOST=0.0.0.0
-        echo PORT=8082
+        echo PORT=8000
         echo.
         echo # Security
         echo SECRET_KEY=test-secret-key-for-development-only-change-in-production
@@ -97,15 +97,15 @@ if not exist ".env" (
         echo GITHUB_TOKEN=
         echo JIRA_API_TOKEN=
     ) > .env
-    echo ✓ .env file created with PORT=8082
+    echo ✓ .env file created with PORT=8000
     echo ⚠️  Please edit .env to add your API keys for full functionality
 ) else (
     echo ✓ .env file already exists
     REM Check if PORT is set in .env
     findstr /b /c:"PORT=" .env >nul 2>&1
     if errorlevel 1 (
-        echo PORT=8082 >> .env
-        echo ✓ Added PORT=8082 to .env
+        echo PORT=8000 >> .env
+        echo ✓ Added PORT=8000 to .env
     )
 )
 echo.
@@ -190,13 +190,13 @@ echo.
 echo 2. Start Redis if not running:
 echo    redis-server
 echo.
-echo 3. Run the server on port 8082:
+echo 3. Run the server on port 8000:
 echo    venv\Scripts\activate
-echo    uvicorn app.main:app --reload --host 0.0.0.0 --port 8082
+echo    uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 echo.
 echo 4. Access the API:
-echo    http://localhost:8082
-echo    http://localhost:8082/docs (API documentation)
+echo    http://localhost:8000
+echo    http://localhost:8000/docs (API documentation)
 echo.
 
 
