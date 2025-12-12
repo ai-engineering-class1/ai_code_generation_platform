@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
@@ -117,6 +118,7 @@ export default function Terminal({ isOpen, onClose, mode = 'fixed' }: TerminalPr
                             rows: term.rows
                         }));
                     }
+
                 };
 
                 ws.onmessage = (event) => {
@@ -148,6 +150,7 @@ export default function Terminal({ isOpen, onClose, mode = 'fixed' }: TerminalPr
                             cols: size.cols,
                             rows: size.rows
                         }));
+
                     }
                 });
 
