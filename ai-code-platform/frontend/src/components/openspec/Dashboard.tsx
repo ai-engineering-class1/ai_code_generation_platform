@@ -1,6 +1,7 @@
 'use client';
 
 import {
+    ArrowLeft,
     Settings,
     Play,
     Users,
@@ -37,6 +38,20 @@ export default function Dashboard({
 
     return (
         <aside className="w-72 bg-white border-l border-gray-200 flex flex-col h-full overflow-y-auto">
+            {/* Back to Task Button - Only shown when accessed from Task */}
+            {isReadOnly && (
+                <div className="p-4 pb-0">
+                    <button
+                        onClick={() => window.history.back()}
+                        className="flex items-center gap-2 text-gray-500 hover:text-gray-900 transition-colors text-sm font-medium"
+                        title="Back to Task"
+                    >
+                        <ArrowLeft className="w-4 h-4" />
+                        Back to Task
+                    </button>
+                </div>
+            )}
+
             {/* Task Context - Display if task description is provided */}
             {taskDescription && (
                 <div className="p-4 border-b border-gray-200 bg-blue-50">
@@ -130,15 +145,7 @@ export default function Dashboard({
 
                 <div className="space-y-2">
                     {/* Back to Task Button - Only shown when accessed from Task */}
-                    {isReadOnly && (
-                        <button
-                            onClick={() => window.history.back()}
-                            className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-blue-600 text-blue-600 text-sm font-medium rounded-lg hover:bg-blue-50 transition-colors"
-                        >
-                            <Settings className="w-4 h-4 rotate-180" /> {/* Using Settings for now as pseudo-back, or import ArrowLeft */}
-                            Back to Task
-                        </button>
-                    )}
+
 
                     <button
                         onClick={onExport}
@@ -148,13 +155,7 @@ export default function Dashboard({
                         Export Project
                     </button>
 
-                    <button
-                        onClick={onOpenTerminal}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
-                    >
-                        <Code2 className="w-4 h-4" />
-                        Open Terminal
-                    </button>
+
                 </div>
             </div>
 

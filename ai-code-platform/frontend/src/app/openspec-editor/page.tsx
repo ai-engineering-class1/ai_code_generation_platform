@@ -54,8 +54,8 @@ function EditorContent() {
         const defaultProject: OpenSpecProject = {
             id: pId,
             projectName: 'New OpenSpec Project',
-            owner: 'user', // In real app, get from auth context
-            repository: 'repo',
+            owner: 'DrLinAITeam2', // In real app, get from auth context
+            repository: 'simplest-repo',
             isPrivate: true,
             specTree: [],
             createdAt: new Date().toISOString(),

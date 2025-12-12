@@ -9,7 +9,7 @@ import { X, Maximize2, Minimize2 } from 'lucide-react';
 interface TerminalProps {
     isOpen: boolean;
     onClose: () => void;
-    mode?: 'fixed' | 'embedded';
+    mode?: 'fixed' | 'embedded' | 'popup';
 }
 
 export default function Terminal({ isOpen, onClose, mode = 'fixed' }: TerminalProps) {
@@ -21,172 +21,192 @@ export default function Terminal({ isOpen, onClose, mode = 'fixed' }: TerminalPr
     const commandBuffer = useRef<string>('');
     const [isMaximized, setIsMaximized] = useState(false);
 
+    // Helper to safely fit the terminal
+    const safeFit = () => {
+        if (!fitAddonRef.current || !xtermRef.current || !terminalRef.current) return;
+
+        // This is the core check: element must have dimensions and be connected to DOM
+        if (terminalRef.current.clientWidth === 0 || terminalRef.current.clientHeight === 0) return;
+        if (!terminalRef.current.offsetParent) return;
+
+        // Check if xterm is disposed (internal property, but widely used)
+        // @ts-ignore
+        if (xtermRef.current._core && xtermRef.current._core._isDisposed) return;
+
+        try {
+            const dims = fitAddonRef.current.proposeDimensions();
+            if (dims && dims.cols > 1 && dims.rows > 1) {
+                fitAddonRef.current.fit();
+            }
+        } catch (e) {
+            // ignore
+        }
+    };
+
     useEffect(() => {
         if (!isOpen || !terminalRef.current) return;
 
-        // Initialize xterm if not already done
-        if (!xtermRef.current) {
-            const term = new XTerm({
-                cursorBlink: true,
-                theme: {
-                    background: '#1e1e1e',
-                    foreground: '#ffffff',
-                },
-                fontSize: 14,
-                fontFamily: 'Consolas, "Courier New", monospace',
-                convertEol: true, // Crucial for Windows line endings
-            });
+        let initTimer: NodeJS.Timeout;
+        let resizeObserver: ResizeObserver | null = null;
+        let term: XTerm | null = null;
+        let ws: WebSocket | null = null;
 
-            const fitAddon = new FitAddon();
-            term.loadAddon(fitAddon);
+        const initTerminal = () => {
+            // Check if element is actually visible/sized
+            if (!terminalRef.current ||
+                terminalRef.current.clientWidth === 0 ||
+                terminalRef.current.clientHeight === 0) {
+                // Not ready, try again shortly
+                initTimer = setTimeout(initTerminal, 100);
+                return;
+            }
 
-            term.open(terminalRef.current);
+            // Initialize xterm if not already done
+            if (!xtermRef.current) {
+                term = new XTerm({
+                    cursorBlink: true,
+                    theme: {
+                        background: '#1e1e1e',
+                        foreground: '#ffffff',
+                    },
+                    fontSize: 14,
+                    fontFamily: 'Consolas, "Courier New", monospace',
+                    convertEol: true, // Crucial for Windows line endings
+                });
 
-            // Use ResizeObserver to fit terminal when container dimensions change
-            // This is safer than setTimeout and handles dynamic layout changes
-            // Use ResizeObserver to fit terminal when container dimensions change
-            // This is safer than setTimeout and handles dynamic layout changes
-            const resizeObserver = new ResizeObserver(() => {
-                // Defer fit to next animation frame to avoid layout thrashing/race conditions
-                window.requestAnimationFrame(() => {
-                    // Check if refs are still valid (component might have unmounted)
-                    if (!terminalRef.current || !xtermRef.current) return;
+                const fitAddon = new FitAddon();
+                term.loadAddon(fitAddon);
 
-                    // Check visibility
-                    if (!terminalRef.current.offsetParent) return;
+                term.open(terminalRef.current);
+                xtermRef.current = term;
+                fitAddonRef.current = fitAddon;
 
-                    try {
-                        const dims = fitAddon.proposeDimensions();
-                        if (dims && dims.cols > 1 && dims.rows > 1) {
-                            fitAddon.fit();
-                        }
-                    } catch (e) {
-                        // ignore
+                // Initial fit
+                safeFit();
+
+                // Use ResizeObserver to fit terminal when container dimensions change
+                resizeObserver = new ResizeObserver(() => {
+                    // Defer to prevent "ResizeObserver loop limit exceeded"
+                    window.requestAnimationFrame(() => {
+                        safeFit();
+                    });
+                });
+
+                if (terminalRef.current) {
+                    resizeObserver.observe(terminalRef.current);
+                }
+
+                // Connect to WebSocket
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                let apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+                apiBase = apiBase.replace(/\/$/, '');
+                const wsUrl = apiBase.replace(/^http/, 'ws') + '/api/v1/terminal/ws';
+
+                console.log('Connecting to Terminal WebSocket:', wsUrl);
+                term.write(`\r\n\x1b[90mConnecting to service at ${wsUrl}...\x1b[0m\r\n`);
+
+                ws = new WebSocket(wsUrl);
+
+                ws.onopen = () => {
+                    term?.write('\r\n\x1b[32mConnected to PowerShell Console\x1b[0m\r\n');
+                };
+
+                ws.onmessage = (event) => {
+                    term?.write(event.data);
+                };
+
+                ws.onclose = () => {
+                    term?.write('\r\n\x1b[31mConnection closed\x1b[0m\r\n');
+                };
+
+                ws.onerror = (err) => {
+                    console.error('WebSocket error:', err);
+                    term?.write('\r\n\x1b[31mConnection error\x1b[0m\r\n');
+                };
+
+                term.onData((data) => {
+                    if (ws?.readyState === WebSocket.OPEN) {
+                        ws.send(data);
                     }
                 });
-            });
 
-            resizeObserver.observe(terminalRef.current);
+                wsRef.current = ws;
+            }
+        };
 
-            xtermRef.current = term;
-            fitAddonRef.current = fitAddon;
+        // Start initialization attempt
+        initTerminal();
 
-            // Connect to WebSocket
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            // Start with base URL from env or default
-            let apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8082';
-            // Remove trailing slash if present
-            apiBase = apiBase.replace(/\/$/, '');
-
-            // Construct WS URL: replace protocol, append /api/v1/terminal/ws
-            // Ensure we handle https/wss vs http/ws logic if apiBase has protocol
-            const wsUrl = apiBase.replace(/^http/, 'ws') + '/api/v1/terminal/ws';
-
-            console.log('Connecting to Terminal WebSocket:', wsUrl);
-            term.write(`\r\n\x1b[90mConnecting to service at ${wsUrl}...\x1b[0m\r\n`);
-
-            const ws = new WebSocket(wsUrl);
-
-            ws.onopen = () => {
-                term.write('\r\n\x1b[32mConnected to PowerShell Console\x1b[0m\r\n');
-                // ws.send('dir\r'); // Don't auto-send, let user type
-            };
-
-            ws.onmessage = (event) => {
-                // If backend does echo, we might see duplicates. 
-                // For now, assume backend output is "output"
-                term.write(event.data);
-            };
-
-            ws.onclose = () => {
-                term.write('\r\n\x1b[31mConnection closed\x1b[0m\r\n');
-            };
-
-            ws.onerror = (err) => {
-                console.error('WebSocket error:', err);
-                term.write('\r\n\x1b[31mConnection error\x1b[0m\r\n');
-            };
-
-            // Send input to server directly - PTY handles buffering and echo
-            term.onData((data) => {
-                if (ws.readyState === WebSocket.OPEN) {
-                    ws.send(data);
-                }
-            });
-
-            wsRef.current = ws;
-
-            // Handle resize (window resize is still useful for general updates)
-            const handleResize = () => {
-                // fitAddon.fit() is handled by ResizeObserver now mostly, but safe to keep
-            };
-            window.addEventListener('resize', handleResize);
-
-            return () => {
-                window.removeEventListener('resize', handleResize);
+        return () => {
+            clearTimeout(initTimer);
+            if (resizeObserver) {
                 resizeObserver.disconnect();
+            }
+            if (ws) {
                 ws.close();
+            }
+            if (term) {
                 term.dispose();
-                xtermRef.current = null;
-                wsRef.current = null;
-                commandBuffer.current = '';
-            };
-        }
+            }
+            xtermRef.current = null;
+            wsRef.current = null;
+            fitAddonRef.current = null;
+            commandBuffer.current = '';
+        };
     }, [isOpen]);
 
     // Refit when maximized/minimized or opened
     useEffect(() => {
+        let fitTimer: NodeJS.Timeout;
         if (isOpen && fitAddonRef.current) {
             // Small delay to allow transition to finish
-            setTimeout(() => {
-                try {
-                    // Safety check before fitting
-                    if (!terminalRef.current || !terminalRef.current.offsetParent) return;
-
-                    const dims = fitAddonRef.current?.proposeDimensions();
-                    if (dims && dims.cols > 1 && dims.rows > 1) {
-                        fitAddonRef.current?.fit();
-                    }
-                } catch (e) {
-                    // ignore
-                }
+            fitTimer = setTimeout(() => {
+                safeFit();
             }, 300);
         }
+        return () => {
+            clearTimeout(fitTimer);
+        };
     }, [isOpen, isMaximized]);
 
     if (!isOpen) return null;
 
     const fixedClasses = `fixed bottom-0 left-0 right-0 bg-[#1e1e1e] border-t border-gray-700 shadow-2xl transition-all duration-300 z-50 flex flex-col ${isMaximized ? 'h-[80vh]' : 'h-64'}`;
     const embeddedClasses = `h-full w-full bg-[#1e1e1e] flex flex-col`;
+    const popupClasses = `fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[900px] h-[600px] bg-[#1e1e1e] border border-gray-700 shadow-2xl z-50 flex flex-col rounded-lg overflow-hidden`;
 
     return (
         <div
-            className={mode === 'embedded' ? embeddedClasses : fixedClasses}
+            className={mode === 'embedded' ? embeddedClasses : (mode === 'popup' ? popupClasses : fixedClasses)}
         >
-            {/* Terminal Header */}
-            <div className="flex items-center justify-between px-4 py-2 bg-[#2d2d2d] border-b border-gray-700 select-none">
-                <span className="text-gray-300 text-sm font-medium flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                    PowerShell Console
-                </span>
-                <div className="flex items-center gap-2">
-                    <button
-                        onClick={() => setIsMaximized(!isMaximized)}
-                        className="p-1 hover:bg-gray-600 rounded text-gray-400 hover:text-white transition-colors"
-                    >
-                        {isMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-                    </button>
-                    <button
-                        onClick={onClose}
-                        className="p-1 hover:bg-red-600 rounded text-gray-400 hover:text-white transition-colors"
-                    >
-                        <X size={14} />
-                    </button>
+            {/* Terminal Header - Hide in embedded mode */}
+            {mode !== 'embedded' && (
+                <div className="flex items-center justify-between px-4 py-2 bg-[#2d2d2d] border-b border-gray-200 select-none">
+                    <span className="text-gray-300 text-sm font-medium flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                        PowerShell Console
+                    </span>
+                    <div className="flex items-center gap-2">
+                        {mode !== 'popup' && (
+                            <button
+                                onClick={() => setIsMaximized(!isMaximized)}
+                                className="p-1 hover:bg-gray-600 rounded text-gray-400 hover:text-white transition-colors"
+                            >
+                                {isMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                            </button>
+                        )}
+                        <button
+                            onClick={onClose}
+                            className="p-1 hover:bg-red-600 rounded text-gray-400 hover:text-white transition-colors"
+                        >
+                            <X size={14} />
+                        </button>
+                    </div>
                 </div>
-            </div>
+            )}
 
             {/* Terminal Content */}
-            <div className="flex-1 overflow-hidden p-2">
+            <div className={`flex-1 overflow-hidden p-2 ${mode === 'embedded' ? 'h-full' : ''}`}>
                 <div ref={terminalRef} className="h-full w-full" />
             </div>
         </div>

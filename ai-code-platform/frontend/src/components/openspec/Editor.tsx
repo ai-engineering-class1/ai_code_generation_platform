@@ -40,6 +40,8 @@ export default function Editor({
     const [activeTab, setActiveTab] = useState<TabType>('specification');
     const [content, setContent] = useState('');
 
+    const [showTerminal, setShowTerminal] = useState(false);
+
     useEffect(() => {
         setContent(specification?.content || '');
     }, [specification]);
@@ -109,11 +111,11 @@ export default function Editor({
     const tabs = [
         { id: 'specification' as TabType, label: 'Specification', icon: FileCode },
         { id: 'preview' as TabType, label: 'Preview', icon: Eye },
-        { id: 'suggestions' as TabType, label: 'AI Suggestions', icon: TerminalSquare },
+        { id: 'suggestions' as TabType, label: 'AI Suggestions', icon: Sparkles },
     ];
 
     return (
-        <section className="flex-1 flex flex-col overflow-hidden bg-white">
+        <section className="flex-1 flex flex-col overflow-hidden bg-white relative">
             {/* Editor Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
                 <div className="flex gap-1">
@@ -194,13 +196,44 @@ export default function Editor({
                     </div>
                 )}
 
-                {/* Suggestions Tab (Now Terminal) */}
+                {/* Suggestions Tab */}
                 {activeTab === 'suggestions' && (
-                    <div className="h-full bg-[#1e1e1e] p-2">
-                        <Terminal isOpen={true} onClose={() => { }} mode="embedded" />
+                    <div className="h-full flex flex-col items-center justify-center space-y-4 p-8 bg-gray-50">
+                        <div className="text-center">
+                            <Sparkles className="w-12 h-12 text-blue-500 mx-auto mb-4" />
+                            <h3 className="text-lg font-medium text-gray-900 mb-2">AI Suggestions & Tools</h3>
+                            <p className="text-gray-500 max-w-md mx-auto mb-8">
+                                Use AI to analyze your specification or open the terminal to interact with the system directly.
+                            </p>
+                        </div>
+
+                        <div className="flex gap-4">
+                            <button
+                                onClick={onGenerateSuggestions}
+                                className="flex items-center gap-2 px-6 py-3 bg-white border border-gray-200 shadow-sm text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                            >
+                                <Lightbulb className="w-5 h-5 text-yellow-500" />
+                                <span>Generate Suggestions</span>
+                            </button>
+
+                            <button
+                                onClick={() => setShowTerminal(true)}
+                                className="flex items-center gap-2 px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors shadow-lg"
+                            >
+                                <TerminalSquare className="w-5 h-5" />
+                                <span>Open Terminal Window</span>
+                            </button>
+                        </div>
                     </div>
                 )}
             </div>
+
+            {/* Popup Terminal */}
+            <Terminal
+                isOpen={showTerminal}
+                onClose={() => setShowTerminal(false)}
+                mode="popup" // Needs to be supported in Terminal.tsx
+            />
         </section>
     );
 }
