@@ -15,8 +15,8 @@ export interface Project {
   name: string
   description: string
   ownerId: string
-  jiraProjectKey?: string
-  githubRepoUrl?: string
+  jira_project_key?: string
+  github_repo_url?: string
   status: 'active' | 'paused' | 'completed' | 'archived'
   createdAt: string
   updatedAt: string

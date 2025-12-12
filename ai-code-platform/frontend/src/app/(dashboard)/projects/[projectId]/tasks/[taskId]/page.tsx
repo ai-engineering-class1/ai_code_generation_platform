@@ -4,9 +4,11 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
-import { ArrowLeft, Clock, User, FileText, GitPullRequest, CheckCircle2, AlertCircle, X, Bot, DollarSign, Timer, Zap } from 'lucide-react'
+import { ArrowLeft, Clock, User, FileText, GitPullRequest, CheckCircle2, AlertCircle, X, Bot, DollarSign, Timer, Zap, Edit } from 'lucide-react'
 import apiClient from '@/lib/api'
 import { TaskDetail, User as UserType } from '@/types'
+import Dashboard from '@/components/openspec/Dashboard'
+import { OpenSpecProject } from '@/lib/types/openspec'
 
 // Agent Task response interface
 interface AgentTaskResult {
@@ -63,6 +65,24 @@ export default function TaskDetailPage({
     currentStage: '',
   })
 
+  // Pagination for Activity Log
+  const [activityPage, setActivityPage] = useState(1)
+  const [activityPerPage, setActivityPerPage] = useState(5)
+
+  const mockActivities = [
+    { id: 1, date: "2025-12-11 15:30:02", user: "Victor", comment: "analyzed the error log" },
+    { id: 2, date: "2025-12-10 11:20:03", user: "GitHub CI Action", comment: "CI error xxx using a", link: "#", linkLabel: "GitHub link" },
+    { id: 3, date: "2025-12-10 11:20:02", user: "Vicor", comment: "Fixed the issue" },
+    { id: 4, date: "2025-12-09 10:30:02", user: "Tom", comment: "Found an issue xxx with a", link: "#", linkLabel: "Jira link" },
+    // Adding more mock data to demonstrate pagination if needed
+    { id: 5, date: "2025-12-08 14:00:00", user: "Alice", comment: "Checked requirements" },
+    { id: 6, date: "2025-12-08 09:15:00", user: "Bob", comment: "Created initial task" },
+  ]
+
+  const totalActivityCount = mockActivities.length
+  const totalActivityPages = Math.ceil(totalActivityCount / activityPerPage)
+  const paginatedActivities = mockActivities.slice((activityPage - 1) * activityPerPage, activityPage * activityPerPage)
+
   const { data: task, isLoading, error } = useQuery<TaskDetail>({
     queryKey: ['task', projectId, taskId],
     queryFn: async () => {
@@ -110,6 +130,16 @@ export default function TaskDetailPage({
       return failureCount < 1
     },
     retryDelay: 2000,
+  })
+
+  // Fetch project details for breadcrumbs
+  const { data: project } = useQuery({
+    queryKey: ['project', projectId],
+    queryFn: async () => {
+      const response = await apiClient.get(`/projects/${projectId}`)
+      return response.data
+    },
+    enabled: !!projectId
   })
 
   // Fetch users for assignee dropdown
@@ -174,20 +204,7 @@ export default function TaskDetailPage({
     }
   }, [isEditModalOpen, task])
 
-  const generateSpecMutation = useMutation({
-    mutationFn: async () => {
-      const response = await apiClient.post(`/github/generate-spec/${taskId}`)
-      return response.data
-    },
-    onSuccess: () => {
-      // Refresh task data to show the new specification
-      queryClient.invalidateQueries({ queryKey: ['task', projectId, taskId] })
-      alert('Specification generation started! It may take a few moments.')
-    },
-    onError: (error: any) => {
-      alert(`Failed to generate specification: ${error.response?.data?.detail || error.message}`)
-    },
-  })
+
 
   const assignToAgentMutation = useMutation({
     mutationFn: async () => {
@@ -289,44 +306,68 @@ export default function TaskDetailPage({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="flex flex-col h-screen overflow-hidden bg-gray-50">
       {/* Header */}
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <Link
-                href={`/projects/${projectId}`}
-                className="text-gray-600 hover:text-gray-900 transition"
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </Link>
-              <div>
-                <div className="flex items-center space-x-3">
-                  <h1 className="text-2xl font-bold text-gray-900">{task.title}</h1>
-                  <span className={`px-3 py-1 text-sm rounded-full ${getStatusColor(task.status)}`}>
-                    {task.status}
-                  </span>
-                </div>
-                {task.jiraIssueKey && (
-                  <p className="text-sm text-gray-600 mt-1">Jira: {task.jiraIssueKey}</p>
-                )}
-              </div>
-            </div>
-          </div>
+      <header className="bg-white border-b border-gray-200 px-4 h-14 flex items-center justify-between z-10 sticky top-0">
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/projects/${projectId}`}
+            className="flex items-center gap-1 text-gray-500 hover:text-gray-900 transition-colors text-sm font-medium mr-2"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span className="hidden sm:inline">Back</span>
+          </Link>
+          <span className="font-bold text-gray-700 text-lg">Task</span>
+          <span className="text-gray-500 text-sm font-medium ml-1 flex items-center gap-1">
+            {project?.name ? `/${project.name}` : ''}
+            {task.title ? `/${task.title}` : ''}
+          </span>
+          <span className={`ml-2 px-2.5 py-0.5 text-xs font-medium rounded-full ${getStatusColor(task.status)}`}>
+            {task.status}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          {!task.specification && (
+            <Link
+              href={`/openspec-editor?projectId=${projectId}&taskId=${taskId}`}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            >
+              <FileText className="w-4 h-4" />
+              Edit Spec
+            </Link>
+          )}
+          <button
+            onClick={() => assignToAgentMutation.mutate()}
+            disabled={assignToAgentMutation.isPending}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Bot className="w-4 h-4" />
+            {assignToAgentMutation.isPending ? 'Assigning...' : 'Assign Agent'}
+          </button>
+          {task.specification && task.specification.approved && !task.codeGeneration && (
+            <button
+              className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            >
+              <GitPullRequest className="w-4 h-4" />
+              Generate Code
+            </button>
+          )}
+          <button
+            onClick={() => setIsEditModalOpen(true)}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+          >
+            <Edit className="w-4 h-4" />
+            Edit Task
+          </button>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main Column */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Description */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Description</h2>
-              <p className="text-gray-700 whitespace-pre-wrap">{task.description || 'No description provided'}</p>
-            </div>
+      <main className="flex-1 flex flex-row overflow-hidden">
+        {/* Main Column */}
+        <div className="flex-1 overflow-y-auto bg-gray-50 p-6">
+          <div className="max-w-5xl mx-auto space-y-6">
+
 
             {/* Specification */}
             {task.specification && (
@@ -349,6 +390,13 @@ export default function TaskDetailPage({
                         Approve Specification
                       </button>
                     )}
+                    <Link
+                      href={`/openspec-editor?projectId=${projectId}&taskId=${taskId}`}
+                      className="px-3 py-1.5 bg-gray-100 text-gray-700 text-xs font-medium rounded-md hover:bg-gray-200 transition flex items-center"
+                    >
+                      <FileText className="h-3 w-3 mr-1" />
+                      Edit Specification
+                    </Link>
                   </div>
                 </div>
                 <div className="prose max-w-none">
@@ -545,276 +593,291 @@ export default function TaskDetailPage({
                 )}
               </div>
             )}
-          </div>
 
-          {/* Sidebar */}
-          <div className="space-y-6">
-            {/* Task Info */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Task Details</h2>
-              <div className="space-y-3">
-                <div>
-                  <p className="text-sm text-gray-600 mb-1">Type</p>
-                  <span className="inline-block px-2 py-1 bg-gray-100 text-gray-800 text-sm rounded">
-                    {task.type}
-                  </span>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600 mb-1">Priority</p>
-                  <span className={`inline-block px-2 py-1 text-sm rounded ${getPriorityColor(task.priority)}`}>
-                    {task.priority}
-                  </span>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600 mb-1">Current Stage</p>
-                  <span className="inline-block px-2 py-1 bg-blue-100 text-blue-800 text-sm rounded">
-                    {task.currentStage?.replace(/_/g, ' ') || 'N/A'}
-                  </span>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600 mb-1">Assignee</p>
-                  {task.assigneeId ? (
-                    <div className="flex items-center space-x-2">
-                      <User className="h-4 w-4 text-gray-400" />
-                      <span className="text-sm text-gray-900">
-                        {users.find(u => u.id === task.assigneeId)?.name || users.find(u => u.id === task.assigneeId)?.email || 'Unknown User'}
-                      </span>
-                    </div>
-                  ) : (
-                    <span className="text-sm text-gray-400">Unassigned</span>
-                  )}
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600 mb-1">Created</p>
-                  <p className="text-sm text-gray-900">{new Date(task.createdAt).toLocaleDateString()}</p>
-                </div>
-                {task.updatedAt && (
-                  <div>
-                    <p className="text-sm text-gray-600 mb-1">Last Updated</p>
-                    <p className="text-sm text-gray-900">{new Date(task.updatedAt).toLocaleDateString()}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Actions</h2>
-              <div className="space-y-2">
-                {!task.specification && (
-                  <button
-                    onClick={() => generateSpecMutation.mutate()}
-                    disabled={generateSpecMutation.isPending}
-                    className="w-full px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            {/* Mock Activity Log */}
+            {/* Activity Log */}
+            <div className="bg-white rounded-lg shadow mt-6">
+              <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-gray-900">Activity Log</h2>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-500">Items per page:</span>
+                  <select
+                    value={activityPerPage}
+                    onChange={(e) => {
+                      setActivityPerPage(Number(e.target.value))
+                      setActivityPage(1)
+                    }}
+                    className="text-sm border border-gray-300 rounded-md px-2 py-1 focus:ring-blue-500 focus:border-blue-500"
                   >
-                    {generateSpecMutation.isPending ? 'Generating...' : 'Generate Specification'}
-                  </button>
-                )}
-                <button
-                  onClick={() => assignToAgentMutation.mutate()}
-                  disabled={assignToAgentMutation.isPending}
-                  className="w-full px-4 py-2 bg-purple-600 text-white text-sm rounded-md hover:bg-purple-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  <Bot className="h-4 w-4" />
-                  {assignToAgentMutation.isPending ? 'Assigning...' : 'Assign to intended agent'}
-                </button>
-                {task.specification && task.specification.approved && !task.codeGeneration && (
-                  <button className="w-full px-4 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 transition">
-                    Generate Code
-                  </button>
-                )}
-                <button
-                  onClick={() => setIsEditModalOpen(true)}
-                  className="w-full px-4 py-2 border border-gray-300 text-gray-700 text-sm rounded-md hover:bg-gray-50 transition"
-                >
-                  Edit Task
-                </button>
+                    <option value={5}>5</option>
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                  </select>
+                </div>
               </div>
+              <div className="p-6 space-y-4">
+                {paginatedActivities.map((activity) => (
+                  <div key={activity.id} className="block border border-gray-200 rounded-lg p-4 hover:border-blue-500 transition">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-medium text-blue-600 flex items-center gap-2">
+                        <User className="w-3 h-3" />
+                        {activity.user}
+                      </span>
+                      <span className="text-xs text-gray-500">{activity.date}</span>
+                    </div>
+                    <p className="text-gray-700 text-sm">
+                      {activity.comment}
+                      {activity.link && (
+                        <a href={activity.link} className="ml-1 text-blue-500 hover:underline">
+                          {activity.linkLabel}
+                        </a>
+                      )}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              {/* Pagination Footer */}
+              {totalActivityPages > 1 && (
+                <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+                  <div className="text-sm text-gray-500">
+                    Showing {(activityPage - 1) * activityPerPage + 1} to {Math.min(activityPage * activityPerPage, totalActivityCount)} of {totalActivityCount}
+                  </div>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => setActivityPage((p) => Math.max(1, p - 1))}
+                      disabled={activityPage === 1}
+                      className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      Previous
+                    </button>
+                    {Array.from({ length: totalActivityPages }, (_, i) => i + 1).map((p) => (
+                      <button
+                        key={p}
+                        onClick={() => setActivityPage(p)}
+                        className={`px-3 py-1 text-sm border rounded-md ${activityPage === p ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 hover:bg-gray-50'}`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setActivityPage((p) => Math.min(totalActivityPages, p + 1))}
+                      disabled={activityPage === totalActivityPages}
+                      className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
+
+        {/* Sidebar */}
+        <Dashboard
+          project={project ? {
+            id: projectId,
+            projectName: project.name,
+            owner: (project.github_repo_url || project.githubRepoUrl || '').split('/')[3] || 'user',
+            repository: (project.github_repo_url || project.githubRepoUrl || '').split('/')[4]?.replace('.git', '') || 'repo',
+            createdAt: project.createdAt || '',
+            updatedAt: project.updatedAt || '',
+            isPrivate: false,
+            specTree: []
+          } as OpenSpecProject : undefined}
+          task={{ ...task, description: undefined } as any}
+          taskDescription={undefined}
+          onProjectChange={() => { }}
+          onGenerateCode={() => { }}
+          onOpenTerminal={() => { }}
+          isGenerating={false}
+          isReadOnly={true}
+          className="w-80 flex-shrink-0 !border-l border-gray-200 !h-full bg-white"
+        />
       </main>
 
       {/* Edit Modal */}
-      {isEditModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-            <div className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75" onClick={() => setIsEditModalOpen(false)} />
-            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
-              <form onSubmit={handleEditSubmit}>
-                <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-medium text-gray-900">Edit Task</h3>
+      {
+        isEditModalOpen && (
+          <div className="fixed inset-0 z-50 overflow-y-auto">
+            <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+              <div className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75" onClick={() => setIsEditModalOpen(false)} />
+              <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
+                <form onSubmit={handleEditSubmit}>
+                  <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-medium text-gray-900">Edit Task</h3>
+                      <button
+                        type="button"
+                        onClick={() => setIsEditModalOpen(false)}
+                        className="text-gray-400 hover:text-gray-500"
+                      >
+                        <X className="h-6 w-6" />
+                      </button>
+                    </div>
+                    <div className="space-y-4">
+                      {/* Title */}
+                      <div>
+                        <label htmlFor="edit-title" className="block text-sm font-medium text-gray-700 mb-1">
+                          Title *
+                        </label>
+                        <input
+                          type="text"
+                          id="edit-title"
+                          required
+                          value={editFormData.title}
+                          onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+
+                      {/* Description */}
+                      <div>
+                        <label htmlFor="edit-description" className="block text-sm font-medium text-gray-700 mb-1">
+                          Description
+                        </label>
+                        <textarea
+                          id="edit-description"
+                          rows={4}
+                          value={editFormData.description}
+                          onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+
+                      {/* Status */}
+                      <div>
+                        <label htmlFor="edit-status" className="block text-sm font-medium text-gray-700 mb-1">
+                          Status
+                        </label>
+                        <select
+                          id="edit-status"
+                          value={editFormData.status}
+                          onChange={(e) => setEditFormData({ ...editFormData, status: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="in_progress">In Progress</option>
+                          <option value="blocked">Blocked</option>
+                          <option value="completed">Completed</option>
+                          <option value="failed">Failed</option>
+                          <option value="cancelled">Cancelled</option>
+                        </select>
+                      </div>
+
+                      {/* Priority */}
+                      <div>
+                        <label htmlFor="edit-priority" className="block text-sm font-medium text-gray-700 mb-1">
+                          Priority
+                        </label>
+                        <select
+                          id="edit-priority"
+                          value={editFormData.priority}
+                          onChange={(e) => setEditFormData({ ...editFormData, priority: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          <option value="low">Low</option>
+                          <option value="medium">Medium</option>
+                          <option value="high">High</option>
+                          <option value="critical">Critical</option>
+                        </select>
+                      </div>
+
+                      {/* Assignee */}
+                      <div>
+                        <label htmlFor="edit-assignee" className="block text-sm font-medium text-gray-700 mb-1">
+                          Assignee
+                        </label>
+                        {task.assigneeId && (() => {
+                          const currentAssignee = users.find(u => u.id === task.assigneeId)
+                          const displayName = currentAssignee?.name || currentAssignee?.email || 'Unknown User'
+                          const displayEmail = currentAssignee?.name && currentAssignee?.email ? ` (${currentAssignee.email})` : ''
+                          return (
+                            <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded-md">
+                              <p className="text-xs text-blue-800 font-medium mb-1">Currently Assigned:</p>
+                              <div className="flex items-center space-x-2">
+                                <User className="h-3 w-3 text-blue-600" />
+                                <span className="text-sm text-blue-900">
+                                  {displayName}{displayEmail}
+                                </span>
+                              </div>
+                            </div>
+                          )
+                        })()}
+                        <select
+                          id="edit-assignee"
+                          value={editFormData.assigneeId || ''}
+                          onChange={(e) => {
+                            console.log('Assignee changed to:', e.target.value)
+                            setEditFormData({ ...editFormData, assigneeId: e.target.value })
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          <option value="">Unassigned</option>
+                          {users.map((user) => (
+                            <option key={user.id} value={user.id}>
+                              {user.name} ({user.email})
+                              {user.id === task.assigneeId ? ' (Currently Assigned)' : ''}
+                            </option>
+                          ))}
+                        </select>
+                        {task.assigneeId && editFormData.assigneeId !== task.assigneeId && (
+                          <p className="mt-1 text-xs text-amber-600">
+                            ⚠️ Changing assignee will notify the new assignee
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Current Stage */}
+                      <div>
+                        <label htmlFor="edit-stage" className="block text-sm font-medium text-gray-700 mb-1">
+                          Current Stage
+                        </label>
+                        <select
+                          id="edit-stage"
+                          value={editFormData.currentStage}
+                          onChange={(e) => setEditFormData({ ...editFormData, currentStage: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          <option value="requirement">Requirement</option>
+                          <option value="spec_generation">Spec Generation</option>
+                          <option value="spec_review">Spec Review</option>
+                          <option value="code_generation">Code Generation</option>
+                          <option value="pr_created">PR Created</option>
+                          <option value="code_review">Code Review</option>
+                          <option value="ci_running">CI Running</option>
+                          <option value="cd_staging">CD Staging</option>
+                          <option value="approval_pending">Approval Pending</option>
+                          <option value="cd_production">CD Production</option>
+                          <option value="deployed">Deployed</option>
+                          <option value="failed">Failed</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                    <button
+                      type="submit"
+                      disabled={updateTaskMutation.isPending}
+                      className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
+                    >
+                      {updateTaskMutation.isPending ? 'Saving...' : 'Save Changes'}
+                    </button>
                     <button
                       type="button"
                       onClick={() => setIsEditModalOpen(false)}
-                      className="text-gray-400 hover:text-gray-500"
+                      className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
                     >
-                      <X className="h-6 w-6" />
+                      Cancel
                     </button>
                   </div>
-                  <div className="space-y-4">
-                    {/* Title */}
-                    <div>
-                      <label htmlFor="edit-title" className="block text-sm font-medium text-gray-700 mb-1">
-                        Title *
-                      </label>
-                      <input
-                        type="text"
-                        id="edit-title"
-                        required
-                        value={editFormData.title}
-                        onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </div>
-
-                    {/* Description */}
-                    <div>
-                      <label htmlFor="edit-description" className="block text-sm font-medium text-gray-700 mb-1">
-                        Description
-                      </label>
-                      <textarea
-                        id="edit-description"
-                        rows={4}
-                        value={editFormData.description}
-                        onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </div>
-
-                    {/* Status */}
-                    <div>
-                      <label htmlFor="edit-status" className="block text-sm font-medium text-gray-700 mb-1">
-                        Status
-                      </label>
-                      <select
-                        id="edit-status"
-                        value={editFormData.status}
-                        onChange={(e) => setEditFormData({ ...editFormData, status: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="pending">Pending</option>
-                        <option value="in_progress">In Progress</option>
-                        <option value="blocked">Blocked</option>
-                        <option value="completed">Completed</option>
-                        <option value="failed">Failed</option>
-                        <option value="cancelled">Cancelled</option>
-                      </select>
-                    </div>
-
-                    {/* Priority */}
-                    <div>
-                      <label htmlFor="edit-priority" className="block text-sm font-medium text-gray-700 mb-1">
-                        Priority
-                      </label>
-                      <select
-                        id="edit-priority"
-                        value={editFormData.priority}
-                        onChange={(e) => setEditFormData({ ...editFormData, priority: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="low">Low</option>
-                        <option value="medium">Medium</option>
-                        <option value="high">High</option>
-                        <option value="critical">Critical</option>
-                      </select>
-                    </div>
-
-                    {/* Assignee */}
-                    <div>
-                      <label htmlFor="edit-assignee" className="block text-sm font-medium text-gray-700 mb-1">
-                        Assignee
-                      </label>
-                      {task.assigneeId && (() => {
-                        const currentAssignee = users.find(u => u.id === task.assigneeId)
-                        const displayName = currentAssignee?.name || currentAssignee?.email || 'Unknown User'
-                        const displayEmail = currentAssignee?.name && currentAssignee?.email ? ` (${currentAssignee.email})` : ''
-                        return (
-                          <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded-md">
-                            <p className="text-xs text-blue-800 font-medium mb-1">Currently Assigned:</p>
-                            <div className="flex items-center space-x-2">
-                              <User className="h-3 w-3 text-blue-600" />
-                              <span className="text-sm text-blue-900">
-                                {displayName}{displayEmail}
-                              </span>
-                            </div>
-                          </div>
-                        )
-                      })()}
-                      <select
-                        id="edit-assignee"
-                        value={editFormData.assigneeId || ''}
-                        onChange={(e) => {
-                          console.log('Assignee changed to:', e.target.value)
-                          setEditFormData({ ...editFormData, assigneeId: e.target.value })
-                        }}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="">Unassigned</option>
-                        {users.map((user) => (
-                          <option key={user.id} value={user.id}>
-                            {user.name} ({user.email})
-                            {user.id === task.assigneeId ? ' (Currently Assigned)' : ''}
-                          </option>
-                        ))}
-                      </select>
-                      {task.assigneeId && editFormData.assigneeId !== task.assigneeId && (
-                        <p className="mt-1 text-xs text-amber-600">
-                          ⚠️ Changing assignee will notify the new assignee
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Current Stage */}
-                    <div>
-                      <label htmlFor="edit-stage" className="block text-sm font-medium text-gray-700 mb-1">
-                        Current Stage
-                      </label>
-                      <select
-                        id="edit-stage"
-                        value={editFormData.currentStage}
-                        onChange={(e) => setEditFormData({ ...editFormData, currentStage: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="requirement">Requirement</option>
-                        <option value="spec_generation">Spec Generation</option>
-                        <option value="spec_review">Spec Review</option>
-                        <option value="code_generation">Code Generation</option>
-                        <option value="pr_created">PR Created</option>
-                        <option value="code_review">Code Review</option>
-                        <option value="ci_running">CI Running</option>
-                        <option value="cd_staging">CD Staging</option>
-                        <option value="approval_pending">Approval Pending</option>
-                        <option value="cd_production">CD Production</option>
-                        <option value="deployed">Deployed</option>
-                        <option value="failed">Failed</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-                <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                  <button
-                    type="submit"
-                    disabled={updateTaskMutation.isPending}
-                    className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
-                  >
-                    {updateTaskMutation.isPending ? 'Saving...' : 'Save Changes'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsEditModalOpen(false)}
-                    className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
+                </form>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   )
 }
 

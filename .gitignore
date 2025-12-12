@@ -7,6 +7,7 @@ samples/
 # Backend virtual environment and env files
 ai-code-platform/backend/venv/
 ai-code-platform/backend/.env
+ai-code-platform/backend/temp_openspec/
 
 # Frontend dependencies and build output
 ai-code-platform/frontend/node_modules/

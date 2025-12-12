@@ -1,3 +1,11 @@
+import sys
+import asyncio
+
+# Force ProactorEventLoopPolicy on Windows for subprocess support
+# This must coincide with Uvicorn's import of the app
+if sys.platform == 'win32':
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
