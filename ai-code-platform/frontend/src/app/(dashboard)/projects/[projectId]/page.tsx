@@ -349,8 +349,8 @@ export default function ProjectDetailPage({ params }: { params: { projectId: str
           project={project ? {
             id: projectId,
             projectName: project.name,
-            owner: (project.github_repo_url || project.githubRepoUrl || '').split('/')[3] || 'user',
-            repository: (project.github_repo_url || project.githubRepoUrl || '').split('/')[4]?.replace('.git', '') || 'repo',
+            owner: (project.github_repo_url || '').split('/')[3] || 'user',
+            repository: (project.github_repo_url || '').split('/')[4]?.replace('.git', '') || 'repo',
             createdAt: project.createdAt || '',
             updatedAt: project.updatedAt || '',
             isPrivate: false,
@@ -408,8 +408,8 @@ export default function ProjectDetailPage({ params }: { params: { projectId: str
               </div>
               <div>
                 <label className="block text-xs font-medium text-blue-600 mb-1">GitHub</label>
-                <p className={`text-sm font-sans font-medium ${project.githubRepoUrl ? 'text-green-600' : 'text-gray-500'}`}>
-                  {project.githubRepoUrl ? 'Connected' : 'Not Connected'}
+                <p className={`text-sm font-sans font-medium ${project.github_repo_url ? 'text-green-600' : 'text-gray-500'}`}>
+                  {project.github_repo_url ? 'Connected' : 'Not Connected'}
                 </p>
               </div>
             </div>
