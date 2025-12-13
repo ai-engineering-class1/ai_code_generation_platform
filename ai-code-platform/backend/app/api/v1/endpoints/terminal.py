@@ -43,6 +43,10 @@ class RestrictedShell:
             except ImportError:
                 print("WARNING: pywinpty not found.")
 
+        # Determine Shell Title based on OS
+        self.shell_title = "PowerShell Console" if os.name == 'nt' else "Bash Console"
+
+
     def _find_claude(self):
         # Try to find claude in path
         return shutil.which("claude") or "claude"
@@ -66,6 +70,13 @@ class RestrictedShell:
 
     async def run(self):
         try:
+             # Send Setup Packet
+            await self.send_json({
+                "type": "setup",
+                "title": self.shell_title,
+                "safe_mode": self.safe_mode
+            })
+
             if self.safe_mode:
                 # Initial banner
                 await self.send_output(f"\r\n\x1b[36m--- AI Platform Restricted Terminal ---\x1b[0m\r\n")
@@ -299,7 +310,7 @@ class RestrictedShell:
                 try:
                     text = self.proc_obj.read(1024)
                     if not text: continue
-                    asyncio.run_coroutine_threadsafe(self.websocket.send_text(text), self.loop)
+                    asyncio.run_coroutine_threadsafe(self.send_output(text), self.loop)
                 except EOFError:
                     break
                 except Exception:
@@ -318,7 +329,7 @@ class RestrictedShell:
                         break # EOF
                     
                     text = data.decode('utf-8', errors='replace')
-                    asyncio.run_coroutine_threadsafe(self.websocket.send_text(text), self.loop)
+                    asyncio.run_coroutine_threadsafe(self.send_output(text), self.loop)
                 except OSError:
                     # E.g. Input/output error on close
                     break
@@ -339,7 +350,7 @@ class RestrictedShell:
                 data = self.proc_obj.stdout.read(4096)
                 if data:
                     text = data.decode('utf-8', errors='replace')
-                    asyncio.run_coroutine_threadsafe(self.websocket.send_text(text), self.loop)
+                    asyncio.run_coroutine_threadsafe(self.send_output(text), self.loop)
                 else:
                     break
         except Exception:
@@ -367,7 +378,13 @@ class RestrictedShell:
 
     async def send_output(self, text: str):
         try:
-            await self.websocket.send_text(text)
+            await self.websocket.send_json({"type": "output", "data": text})
+        except:
+            pass
+
+    async def send_json(self, data: dict):
+        try:
+            await self.websocket.send_json(data)
         except:
             pass
             

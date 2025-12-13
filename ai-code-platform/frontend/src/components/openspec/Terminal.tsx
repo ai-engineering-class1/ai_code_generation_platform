@@ -34,6 +34,8 @@ export default function Terminal({ isOpen, onClose, mode = 'fixed', onStatusChan
 
     const [isMinimized, setIsMinimized] = useState(false);
     const [isConnected, setIsConnected] = useState(false);
+    const [isSafeMode, setIsSafeMode] = useState(true);
+    const [terminalTitle, setTerminalTitle] = useState('Terminal Console');
 
     // Helper to safely fit the terminal
     const safeFit = () => {
@@ -65,6 +67,10 @@ export default function Terminal({ isOpen, onClose, mode = 'fixed', onStatusChan
         let resizeObserver: ResizeObserver | null = null;
         let term: XTerm | null = null;
         let ws: WebSocket | null = null;
+
+
+
+
 
         const initTerminal = () => {
             // Check if element is actually visible/sized
@@ -130,7 +136,6 @@ export default function Terminal({ isOpen, onClose, mode = 'fixed', onStatusChan
                 ws = new WebSocket(wsUrl);
 
                 ws.onopen = () => {
-                    term?.write('\r\n\x1b[32mConnected to PowerShell Console\x1b[0m\r\n');
                     setIsConnected(true);
                     if (onStatusChange) onStatusChange(true);
                     // Send initial resize
@@ -145,7 +150,20 @@ export default function Terminal({ isOpen, onClose, mode = 'fixed', onStatusChan
                 };
 
                 ws.onmessage = (event) => {
-                    term?.write(event.data);
+                    try {
+                        const msg = JSON.parse(event.data);
+                        if (msg.type === 'output') {
+                            term?.write(msg.data);
+                        } else if (msg.type === 'setup') {
+                            setTerminalTitle(msg.title);
+                            setIsSafeMode(msg.safe_mode);
+                            // Initial Banner after setup
+                            term?.write(`\r\n\x1b[32mConnected to ${msg.title}\x1b[0m\r\n`);
+                        }
+                    } catch (e) {
+                        // Fallback for raw text (legacy)
+                        term?.write(event.data);
+                    }
                 };
 
                 ws.onclose = () => {
@@ -242,7 +260,7 @@ export default function Terminal({ isOpen, onClose, mode = 'fixed', onStatusChan
                 <div className="flex items-center justify-between px-4 py-2 bg-[#2d2d2d] border-b border-gray-200 select-none">
                     <span className="text-gray-300 text-sm font-medium flex items-center gap-2">
                         <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                        PowerShell Console
+                        {terminalTitle} {!isSafeMode && <span className="text-xs text-red-500 font-bold ml-2 border border-red-500 rounded px-1">(Safe mode off)</span>}
                     </span>
                     <div className="flex items-center gap-2">
                         <button
