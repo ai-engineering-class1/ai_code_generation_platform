@@ -44,7 +44,50 @@ function EditorContent() {
     const [showUploadModal, setShowUploadModal] = useState(false);
     const [showGenerateModal, setShowGenerateModal] = useState(false);
     const [showTerminal, setShowTerminal] = useState(false);
+    const [isTerminalConnected, setIsTerminalConnected] = useState(false);
+    const [terminalKey, setTerminalKey] = useState(0);
+
+    const handleOpenTerminal = () => {
+        if (showTerminal && !isTerminalConnected) {
+            // Restart terminal by forcing remount
+            setTerminalKey(prev => prev + 1);
+        }
+        setShowTerminal(true);
+    };
+
+    const handleCloseTerminal = () => {
+        if (isTerminalConnected) {
+            if (window.confirm("The terminal is still running. Do you want to kill the process and close?")) {
+                setShowTerminal(false);
+            }
+        } else {
+            setShowTerminal(false);
+        }
+    };
+
+    const handleSafeBack = () => {
+        if (isTerminalConnected) {
+            if (window.confirm("The terminal is still running. Do you want to kill the process and leave?")) {
+                router.back();
+            }
+        } else {
+            router.back();
+        }
+    };
     const [loadingMessage, setLoadingMessage] = useState('');
+
+    // Warn before closing tab/window if terminal is connected
+    useEffect(() => {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (isTerminalConnected) {
+                e.preventDefault();
+                e.returnValue = ''; // Standard for triggering browser confirmation
+            }
+        };
+
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, [isTerminalConnected]);
 
     // Initialize
     useEffect(() => {
@@ -289,7 +332,7 @@ function EditorContent() {
                 <div className="flex items-center gap-2">
                     {taskId && (
                         <button
-                            onClick={() => router.back()}
+                            onClick={handleSafeBack}
                             className="mr-2 flex items-center gap-1 text-gray-500 hover:text-gray-900 transition-colors text-sm font-medium"
                             title="Back to Task"
                         >
@@ -351,6 +394,8 @@ function EditorContent() {
                     onGenerateSuggestions={handleGenerateSuggestions}
                     suggestions={suggestions}
                     isLoading={isLoading}
+                    onOpenTerminal={handleOpenTerminal}
+                    isTerminalConnected={isTerminalConnected}
                 />
 
                 <Dashboard
@@ -358,8 +403,9 @@ function EditorContent() {
                     task={task}
                     taskDescription={taskDescription}
                     onProjectChange={handleProjectChange}
+                    onProjectChange={handleProjectChange}
                     onGenerateCode={() => setShowGenerateModal(true)}
-                    onOpenTerminal={() => setShowTerminal(true)}
+                    onOpenTerminal={handleOpenTerminal}
                     isGenerating={isGenerating}
                     isReadOnly={!!taskId}
                 />
@@ -379,7 +425,14 @@ function EditorContent() {
                 onGenerate={handleStartImplementation}
             />
 
-            <Terminal isOpen={showTerminal} onClose={() => setShowTerminal(false)} />
+
+
+            <Terminal
+                key={terminalKey}
+                isOpen={showTerminal}
+                onClose={handleCloseTerminal}
+                onStatusChange={setIsTerminalConnected}
+            />
 
             {loadingMessage && <LoadingOverlay message={loadingMessage} />}
         </div>

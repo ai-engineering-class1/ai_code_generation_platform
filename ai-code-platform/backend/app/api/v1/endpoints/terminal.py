@@ -1,25 +1,27 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 import asyncio
 import os
 import sys
 import shutil
 import json
+from app.core.config import settings
 
 router = APIRouter()
 
 @router.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
+async def websocket_endpoint(websocket: WebSocket, cols: int = Query(80), rows: int = Query(24)):
     await websocket.accept()
-    session = RestrictedShell(websocket)
+    session = RestrictedShell(websocket, rows=rows, cols=cols)
     await session.run()
 
 class RestrictedShell:
-    def __init__(self, websocket: WebSocket):
+    def __init__(self, websocket: WebSocket, rows: int = 24, cols: int = 80):
         self.websocket = websocket
+        self.safe_mode = settings.TERMINAL_SAFE_MODE
         self.loop = asyncio.get_running_loop()
         self.proc_obj = None
         self.buffer = ""
-        self.dims = (24, 80)
+        self.dims = (rows, cols)
         
         # PTY State for Linux
         self.master_fd = None
@@ -45,15 +47,39 @@ class RestrictedShell:
         # Try to find claude in path
         return shutil.which("claude") or "claude"
 
+    async def spawn_full_shell(self):
+        if os.name == 'nt':
+            shell_cmd = "powershell.exe"
+            shell_path = shutil.which(shell_cmd)
+            if not shell_path:
+                shell_path = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+        else:
+            shell_cmd = "bash"
+            shell_path = shutil.which(shell_cmd) or "/bin/bash"
+            
+        # Add arguments to suppress banner and profile for a cleaner experience
+        args = [shell_path]
+        if "powershell" in shell_path.lower():
+            args.extend(["-NoLogo", "-NoProfile"])
+            
+        await self.spawn_process(args)
+
     async def run(self):
         try:
-            # Initial banner
-            await self.send_output(f"\r\n\x1b[36m--- AI Platform Restricted Terminal ---\x1b[0m\r\n")
-            await self.send_output(f"Allowed commands: \x1b[33mclaude\x1b[0m, clear, exit, help\r\n")
-            if not self.claude_path:
-                 await self.send_output(f"\x1b[31mWarning: 'claude' executable not found in PATH.\x1b[0m\r\n")
-            
-            await self.send_prompt()
+            if self.safe_mode:
+                # Initial banner
+                await self.send_output(f"\r\n\x1b[36m--- AI Platform Restricted Terminal ---\x1b[0m\r\n")
+                await self.send_output(f"Allowed commands: \x1b[33mclaude\x1b[0m, clear, exit, help\r\n")
+                if not self.claude_path:
+                     await self.send_output(f"\x1b[31mWarning: 'claude' executable not found in PATH.\x1b[0m\r\n")
+                
+                await self.send_prompt()
+            else:
+                 # Full Mode
+                # Clear screen to sync PTY (0,0) with Frontend (0,0)
+                await self.send_output("\x1b[2J\x1b[H")
+                # Removed text message to prevent PTY/Frontend coordinate mismatch
+                await self.spawn_full_shell()
 
             while True:
                 raw_data = await self.websocket.receive_text()
@@ -114,7 +140,10 @@ class RestrictedShell:
                     self.proc_obj.write(data)
                  else:
                     self.proc_obj = None
-                    await self.send_prompt()
+                    if self.safe_mode:
+                        await self.send_prompt()
+                    else:
+                        await self.websocket.close()
             elif os.name != 'nt' and self.master_fd is not None:
                 # Linux PTY Write
                 try:
@@ -133,7 +162,10 @@ class RestrictedShell:
                             pass
                  else:
                     self.proc_obj = None
-                    await self.send_prompt()
+                    if self.safe_mode:
+                        await self.send_prompt()
+                    else:
+                        await self.websocket.close()
             return
 
         # Local Line Editing for shell mode
@@ -203,6 +235,10 @@ class RestrictedShell:
                 import threading
                 thread = threading.Thread(target=self.read_win_pty, daemon=True)
                 thread.start()
+                print(f"DEBUG: Reader thread started for PID {self.proc_obj.pid}")
+                
+                # Force a resize to ensure PTY sync
+                await self.handle_resize()
 
             # Linux/Mac Handling with real PTY
             elif os.name != 'nt':
@@ -269,6 +305,7 @@ class RestrictedShell:
                 except Exception:
                     break
         finally:
+            print("DEBUG: Reader thread exiting")
             self._on_proc_exit()
 
     def read_linux_pty(self):
@@ -320,8 +357,13 @@ class RestrictedShell:
             self.master_fd = None
             
         self.proc_obj = None
-        # Signal prompt return
-        asyncio.run_coroutine_threadsafe(self.send_prompt(), self.loop)
+        
+        if self.safe_mode:
+            # Signal prompt return
+            asyncio.run_coroutine_threadsafe(self.send_prompt(), self.loop)
+        else:
+            # In full mode, if shell exits, close connection
+            asyncio.run_coroutine_threadsafe(self.websocket.close(), self.loop)
 
     async def send_output(self, text: str):
         try:
@@ -334,6 +376,7 @@ class RestrictedShell:
         await self.send_output("\r\n\x1b[32mrestricted> \x1b[0m")
 
     def kill_process(self):
+        print("DEBUG: kill_process called")
         if self.master_fd is not None:
             try:
                 os.close(self.master_fd)
@@ -343,187 +386,14 @@ class RestrictedShell:
 
         if self.proc_obj:
             try:
+                print(f"DEBUG: Terminating process {self.proc_obj}")
                 if self.use_pty and os.name == 'nt':
                     self.proc_obj.close()
                 else:
                     self.proc_obj.terminate()
-            except:
-                pass
+                print("DEBUG: Process terminated successfully")
+            except Exception as e:
+                print(f"DEBUG: Error terminating process: {e}")
             self.proc_obj = None
-async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    
-    # Check for pywinpty on Windows
-    use_pty = False
-    if os.name == 'nt':
-        try:
-            from winpty import PtyProcess
-            use_pty = True
-            print("DEBUG: Using pywinpty for pseudo-console support")
-        except ImportError:
-            print("WARNING: pywinpty not found, falling back to basic pipes. Interactive CLIs may fail.")
-            use_pty = False
 
-    # Determine shell based on OS
-    if os.name == 'nt':
-        shell_cmd = "powershell.exe"
-        shell_path = shutil.which(shell_cmd)
-        if not shell_path:
-            shell_path = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
-    else:
-        shell_cmd = "bash"
-        shell_path = shutil.which(shell_cmd) or "/bin/bash"
-
-    print(f"DEBUG: Attempting to spawn shell: {shell_path}")
-    
-    import threading
-    import asyncio
-
-
-    # Get current loop to schedule updates from thread
-    loop = asyncio.get_running_loop()
-    
-    proc_obj = None
-
-    try:
-        if use_pty and os.name == 'nt':
-            # Create PTY process with proper environment
-            # This is crucial for interactive tools like 'claude', 'vim', etc.
-            env = os.environ.copy()
-            env["TERM"] = "xterm-256color"
-            env["COLORTERM"] = "truecolor"
-            env["PYTHONIOENCODING"] = "utf-8"
-            
-            proc_obj = PtyProcess.spawn(
-                [shell_path, "-NoLogo"],
-                dimensions=(24, 80),
-                env=env
-            )
-            print(f"DEBUG: PTY Subprocess created with PID: {proc_obj.pid}")
-
-        else:
-            # Fallback to standard subprocess
-            import subprocess
-            proc_obj = subprocess.Popen(
-                [shell_path, "-NoLogo"] if os.name == 'nt' else [shell_path],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT, 
-                bufsize=0, 
-            )
-            print(f"DEBUG: Standard Subprocess created with PID: {proc_obj.pid}")
-
-        # Thread function to read stdout
-        def read_stream():
-            try:
-                while True:
-                    data = None
-                    if use_pty and os.name == 'nt':
-                        if not proc_obj.isalive():
-                            break
-                        try:
-                            # read(bytes) checks for blocking
-                            data = proc_obj.read(1024).encode('utf-8')
-                        except EOFError:
-                            break
-                    else:
-                        if proc_obj.poll() is not None:
-                            break
-                        data = proc_obj.stdout.read(4096)
-                    
-                    if not data:
-                        break
-                        
-                    try:
-                        # Decode
-                        encoding = 'utf-8' # winpty output is usually already unicode string, but .read() might return str
-                        # Note: winpty.read() returns STRING, not bytes.
-                        text = ""
-                        if use_pty and os.name == 'nt':
-                             # proc_obj.read() returns str directly
-                             # I did .encode() above to match 'data' variable semantics if I wanted to share code
-                             # Let's fix loop to handle str vs bytes
-                             pass 
-                        # RE-DOING LOOP LOGIC FOR CLARITY BELOW
-                    except Exception as _e:
-                        pass
-            except Exception as _e:
-                pass
-        
-        # Simpler separate readers to avoid complexity
-        def read_pty():
-            try:
-                while proc_obj.isalive():
-                    try:
-                        # read returns string
-                        text = proc_obj.read(1024)
-                        if not text:
-                            continue
-                        asyncio.run_coroutine_threadsafe(websocket.send_text(text), loop)
-                    except EOFError:
-                        break
-            except Exception as e:
-                print(f"PTY Reader thread error: {e}")
-
-        def read_pipe():
-            try:
-                while True:
-                    if proc_obj.poll() is not None:
-                         # Flush remaining
-                         remaining = proc_obj.stdout.read()
-                         if remaining:
-                            text = remaining.decode('cp437' if os.name == 'nt' else 'utf-8', errors='replace')
-                            asyncio.run_coroutine_threadsafe(websocket.send_text(text), loop)
-                         break
-                    
-                    data = proc_obj.stdout.read(4096)
-                    if not data:
-                        break
-                    text = data.decode('cp437' if os.name == 'nt' else 'utf-8', errors='replace')
-                    asyncio.run_coroutine_threadsafe(websocket.send_text(text), loop)
-            except Exception as e:
-                print(f"Pipe Reader thread error: {e}")
-
-        # Start reading
-        reader_target = read_pty if (use_pty and os.name == 'nt') else read_pipe
-        reader = threading.Thread(target=reader_target, daemon=True)
-        reader.start()
-
-        try:
-            while True:
-                # Receive data from client
-                data = await websocket.receive_text()
-                
-                if use_pty and os.name == 'nt':
-                    # PTY write (string)
-                    # Note: xterm.js sends \r for Enter. PTY usually expects \r or \n.
-                    proc_obj.write(data)
-                else:
-                    # Pipe write (bytes)
-                    if proc_obj.stdin:
-                        try:
-                            proc_obj.stdin.write(data.encode())
-                            proc_obj.stdin.flush()
-                        except BrokenPipeError:
-                            break
-                        except Exception as e:
-                            print(f"Error writing to stdin: {e}")
-                            break
-                    
-        except WebSocketDisconnect:
-            print("WebSocket disconnected")
-        except Exception as e:
-            print(f"WebSocket error: {e}")
-        finally:
-            print("DEBUG: Cleaning up process")
-            if use_pty and os.name == 'nt':
-                proc_obj.close() 
-            else:
-                 proc_obj.terminate()
-            
-    except Exception as e:
-        import traceback
-        print(f"Terminal failed to start: {e}")
-        traceback.print_exc()
-        await websocket.close()
 
