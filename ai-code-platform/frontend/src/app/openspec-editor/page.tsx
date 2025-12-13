@@ -403,7 +403,7 @@ function EditorContent() {
                     task={task}
                     taskDescription={taskDescription}
                     onProjectChange={handleProjectChange}
-                    onProjectChange={handleProjectChange}
+
                     onGenerateCode={() => setShowGenerateModal(true)}
                     onOpenTerminal={handleOpenTerminal}
                     isGenerating={isGenerating}
