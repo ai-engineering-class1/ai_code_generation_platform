@@ -36,7 +36,7 @@ services:
     container_name: Lee-ai-code-platform-frontend
     restart: unless-stopped
     ports:
-      - "4530:3000"
+      - "4530:3012"
     networks:
       - Lee-network
     environment:

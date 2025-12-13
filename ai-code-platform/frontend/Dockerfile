@@ -19,7 +19,7 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 RUN npm run build
 
 # Expose port
-EXPOSE 3000
+EXPOSE 3012
 
 # Start the application
 CMD ["npm", "start"]
