@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     # Claude/Anthropic
     ANTHROPIC_API_KEY: str = ""
     
+    # Terminal
+    TERMINAL_SAFE_MODE: bool = True
+    
     # CORS
     CORS_ORIGINS: List[str] = ["http://localhost:3012", "http://localhost:3000"]
     

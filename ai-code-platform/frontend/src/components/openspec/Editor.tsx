@@ -31,6 +31,8 @@ interface EditorProps {
     onGenerateSuggestions: () => void;
     suggestions: Suggestion[];
     isLoading?: boolean;
+    onOpenTerminal: () => void;
+    isTerminalConnected?: boolean;
 }
 
 export default function Editor({
@@ -40,11 +42,11 @@ export default function Editor({
     onGenerateSuggestions,
     suggestions,
     isLoading = false,
+    onOpenTerminal,
+    isTerminalConnected = false,
 }: EditorProps) {
     const [activeTab, setActiveTab] = useState<TabType>('specification');
     // Content state hoisted to parent
-
-    const [showTerminal, setShowTerminal] = useState(false);
 
 
 
@@ -211,23 +213,20 @@ export default function Editor({
                             </button>
 
                             <button
-                                onClick={() => setShowTerminal(true)}
-                                className="flex items-center gap-2 px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors shadow-lg"
+                                onClick={onOpenTerminal}
+                                disabled={isTerminalConnected}
+                                className={`flex items-center gap-2 px-6 py-3 rounded-lg shadow-lg transition-colors ${isTerminalConnected
+                                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                    : 'bg-black text-white hover:bg-gray-800'
+                                    }`}
                             >
                                 <TerminalSquare className="w-5 h-5" />
-                                <span>Open Terminal Window</span>
+                                <span>{isTerminalConnected ? 'Terminal Connected' : 'Open Terminal Window'}</span>
                             </button>
                         </div>
                     </div>
                 )}
             </div>
-
-            {/* Popup Terminal */}
-            <Terminal
-                isOpen={showTerminal}
-                onClose={() => setShowTerminal(false)}
-                mode="popup" // Needs to be supported in Terminal.tsx
-            />
         </section>
     );
 }
