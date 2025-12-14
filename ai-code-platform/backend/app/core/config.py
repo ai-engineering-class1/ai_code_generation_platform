@@ -7,6 +7,10 @@ class Settings(BaseSettings):
     APP_NAME: str = "AI Code Generation Platform"
     APP_VERSION: str = "0.1.0"
     DEBUG: bool = False
+    
+    # Terminal / web shell
+    TERMINAL_GUARD_ENABLED: bool = True
+
     API_V1_PREFIX: str = "/api/v1"
     
     # Server
@@ -55,6 +59,9 @@ class Settings(BaseSettings):
     
     # Logging
     LOG_LEVEL: str = "INFO"
+    
+    # Temp directory for OpenSpec workspaces (defaults to system temp if not set)
+    TEMP_DIR: str = ""
     
     class Config:
         env_file = ".env"

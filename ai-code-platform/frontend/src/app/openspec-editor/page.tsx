@@ -12,7 +12,7 @@ import {
 } from '@/lib/types/openspec';
 import * as api from '@/lib/api/openspec';
 import apiClient from '@/lib/api'; // Import general API client
-import { ArrowLeft, Save, Download, UserPlus } from 'lucide-react';
+import { ArrowLeft, Save, Download, UserPlus, Upload } from 'lucide-react';
 
 // Components
 import dynamic from 'next/dynamic';
@@ -111,7 +111,25 @@ function EditorContent() {
         setProject(defaultProject);
 
         const fetchData = async () => {
-            if (!pId || pId.startsWith('draft-')) return;
+            if (!pId || pId.startsWith('draft-')) {
+                // Try to load from workspace if taskId exists
+                if (tId) {
+                    try {
+                        const initResult = await api.initFromWorkspace(pId, tId);
+                        if (initResult.success && initResult.specContent.specTree.length > 0) {
+                            setProject(prev => prev ? {
+                                ...prev,
+                                specTree: initResult.specContent.specTree,
+                                updatedAt: new Date().toISOString()
+                            } : undefined);
+                            toast.success('Loaded existing workspace');
+                        }
+                    } catch (e) {
+                        console.log('No existing workspace found');
+                    }
+                }
+                return;
+            }
 
             try {
                 // 1. Fetch Project Details
@@ -201,9 +219,9 @@ function EditorContent() {
         setIsLoading(true);
         setLoadingMessage('Uploading and processing OpenSpec...');
         try {
-            const data = await api.uploadOpenSpec(projectId, file);
+            const data = await api.uploadOpenSpec(projectId, file, taskId || undefined);
 
-            // Update project with new tree
+            // Update project with new tree (merged)
             setProject(prev => {
                 if (!prev) return undefined;
                 return {
@@ -211,14 +229,14 @@ function EditorContent() {
                     specTree: data.specContent.specTree,
                     openspecFile: {
                         name: file.name,
-                        path: data.specContent.rootSpec?.path || '', // Adjust based on backend response
+                        path: data.specContent.rootSpec?.path || '',
                         uploadedAt: new Date().toISOString()
                     }
                 };
             });
 
             setShowUploadModal(false);
-            toast.success('OpenSpec uploaded successfully');
+            toast.success('OpenSpec uploaded and saved to workspace');
         } catch (error) {
             console.error(error);
             toast.error('Failed to upload OpenSpec file');
@@ -251,15 +269,12 @@ function EditorContent() {
             await api.updateSpecification(projectId, selectedSpecId, {
                 content,
                 suggestions
-            });
+            }, taskId || undefined);
 
             // Update local state
             setSelectedSpec(prev => prev ? { ...prev, content } : undefined);
 
-            // Update tree state (optional, if preview relies on tree content)
-            // But content is fetched on select, so maybe not critical unless title changes
-
-            toast.success('Saved successfully');
+            toast.success('Saved to workspace');
         } catch (error) {
             console.error(error);
             toast.error('Failed to save changes');
@@ -323,6 +338,45 @@ function EditorContent() {
         });
     };
 
+    const handlePush = async () => {
+        if (!project?.owner || !project?.repository) {
+            toast.error('Please set project owner and repository first');
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            const branchName = `openspec-changes-${Date.now()}`;
+            await api.pushToGitHub(projectId, taskId || undefined, branchName);
+            toast.success(`Pushed to GitHub branch: ${branchName}`);
+        } catch (error) {
+            console.error(error);
+            toast.error('Failed to push to GitHub');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleExport = async () => {
+        setIsLoading(true);
+        try {
+            const blob = await api.exportOpenSpecChanges(projectId, taskId || undefined);
+            const url = window.URL.createObjectURL(new Blob([blob]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `openspec-changes-${taskId || projectId}.zip`);
+            document.body.appendChild(link);
+            link.click();
+            link.parentNode?.removeChild(link);
+            toast.success('OpenSpec changes exported');
+        } catch (error) {
+            console.error(error);
+            toast.error('Failed to export changes');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     return (
         <div className="flex h-screen bg-gray-50 flex-col">
             <Toaster position="top-right" />
@@ -362,8 +416,17 @@ function EditorContent() {
                         Save
                     </button>
                     <button
-                        onClick={() => typeof window !== 'undefined' && window.print()}
-                        className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                        onClick={handlePush}
+                        disabled={isLoading}
+                        className="flex items-center gap-2 px-3 py-1.5 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <Upload className="w-4 h-4" />
+                        Push
+                    </button>
+                    <button
+                        onClick={handleExport}
+                        disabled={isLoading}
+                        className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <Download className="w-4 h-4" />
                         Export

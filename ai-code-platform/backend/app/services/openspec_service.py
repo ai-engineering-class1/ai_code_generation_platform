@@ -2,6 +2,7 @@
 import zipfile
 import io
 import os
+import tempfile
 from pathlib import Path
 from typing import Dict, Any, List, Tuple
 from uuid import uuid4
@@ -13,6 +14,125 @@ class OpenSpecService:
     def __init__(self, temp_dir: str = "./temp"):
         self.temp_dir = Path(temp_dir)
         self.temp_dir.mkdir(parents=True, exist_ok=True)
+    
+    def get_workspace_root(self, task_id: str = None, use_system_temp: bool = True) -> Path:
+        """
+        Get the workspace root directory for OpenSpec files.
+        
+        Args:
+            task_id: Optional task ID to create task-specific workspace
+            use_system_temp: If True, use system temp dir; otherwise use self.temp_dir
+        
+        Returns:
+            Path to workspace root (e.g., /tmp/{task_id}/codebase/simpestrepo)
+        """
+        if use_system_temp:
+            # Use system temp directory with task_id at the root
+            base = Path(tempfile.gettempdir())
+        else:
+            # Use configured temp_dir
+            base = self.temp_dir
+        
+        if task_id:
+            workspace = base / task_id / "codebase" / "simpestrepo"
+        else:
+            workspace = base / "default" / "codebase" / "simpestrepo"
+        
+        workspace.mkdir(parents=True, exist_ok=True)
+        return workspace
+    
+    def get_openspec_changes_dir(self, task_id: str = None, use_system_temp: bool = True) -> Path:
+        """Get the openspec/changes directory within the workspace."""
+        workspace = self.get_workspace_root(task_id, use_system_temp)
+        changes_dir = workspace / "openspec" / "changes"
+        changes_dir.mkdir(parents=True, exist_ok=True)
+        return changes_dir
+    
+    def write_spec_file(self, task_id: str, relative_path: str, content: str, use_system_temp: bool = True):
+        """
+        Write a specification file to the workspace.
+        
+        Args:
+            task_id: Task ID for workspace isolation
+            relative_path: Relative path from repo root (e.g., "openspec/changes/update-xxx/task.md")
+            content: File content to write
+            use_system_temp: If True, use system temp dir
+        """
+        workspace = self.get_workspace_root(task_id, use_system_temp)
+        file_path = workspace / relative_path
+        
+        # Ensure parent directories exist
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Write the file
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        return str(file_path)
+    
+    def build_tree_from_directory(self, task_id: str, use_system_temp: bool = True) -> Dict[str, Any]:
+        """
+        Build a specTree from existing files in the workspace's openspec/changes directory.
+        
+        Returns:
+            Dict with 'specTree' and 'rootSpec' keys, similar to extract_content
+        """
+        changes_dir = self.get_openspec_changes_dir(task_id, use_system_temp)
+        
+        if not changes_dir.exists():
+            return {"specTree": [], "rootSpec": None}
+        
+        spec_tree = []
+        
+        def build_node_from_path(path: Path, relative_to: Path) -> Dict[str, Any]:
+            """Recursively build tree nodes from filesystem."""
+            rel_path = path.relative_to(relative_to)
+            
+            node = {
+                "id": str(uuid4()),
+                "name": path.name,
+                "path": str(rel_path).replace("\\", "/"),
+                "type": "directory" if path.is_dir() else "specification",
+                "content": "",
+                "children": [],
+                "suggestions": []
+            }
+            
+            if path.is_file() and path.suffix == '.md':
+                # Read content
+                try:
+                    with open(path, 'r', encoding='utf-8') as f:
+                        node["content"] = f.read()
+                except Exception as e:
+                    print(f"Error reading {path}: {e}")
+            elif path.is_dir():
+                # Mark special directories
+                if path.name.lower() == "changes":
+                    node["type"] = "change"
+                
+                # Recursively add children
+                try:
+                    for child in sorted(path.iterdir()):
+                        if child.name.startswith('.') or child.name == '__pycache__':
+                            continue
+                        node["children"].append(build_node_from_path(child, relative_to))
+                except Exception as e:
+                    print(f"Error listing {path}: {e}")
+            
+            return node
+        
+        # Start from openspec directory (parent of changes)
+        openspec_dir = changes_dir.parent
+        if openspec_dir.exists():
+            for item in sorted(openspec_dir.iterdir()):
+                if item.name.startswith('.'):
+                    continue
+                spec_tree.append(build_node_from_path(item, openspec_dir.parent))
+        
+        return {
+            "specTree": spec_tree,
+            "rootSpec": None
+        }
     
     def validate_structure(self, file_content: bytes) -> Dict[str, Any]:
         """Validate OpenSpec zip structure."""
@@ -58,7 +178,35 @@ class OpenSpecService:
                 "errors": [str(e)]
             }
     
-    def extract_content(self, file_content: bytes) -> Dict[str, Any]:
+    def export_changes_as_zip(self, task_id: str, use_system_temp: bool = True) -> bytes:
+        """
+        Export the openspec/changes directory as a zip file.
+        
+        Returns:
+            bytes: Zip file content
+        """
+        changes_dir = self.get_openspec_changes_dir(task_id, use_system_temp)
+        
+        if not changes_dir.exists():
+            # Return empty zip
+            buffer = io.BytesIO()
+            with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+                pass
+            return buffer.getvalue()
+        
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+            # Walk the changes directory
+            for root, dirs, files in os.walk(changes_dir):
+                for file in files:
+                    file_path = Path(root) / file
+                    # Calculate archive name relative to changes dir
+                    arcname = str(file_path.relative_to(changes_dir.parent))
+                    zf.write(file_path, arcname.replace("\\", "/"))
+        
+        return buffer.getvalue()
+    
+    def extract_content(self, file_content: bytes, task_id: str = None, write_to_disk: bool = False, use_system_temp: bool = True) -> Dict[str, Any]:
         """Extract OpenSpec content from zip file and build tree structure."""
         spec_tree = []
         
@@ -124,6 +272,15 @@ class OpenSpecService:
                             node = find_or_create_node(spec_tree, path_parts, entry_path)
                             node["content"] = content
                             node["type"] = "specification" # Mark files as specifications
+                            
+                            # Write to disk if requested
+                            if write_to_disk and task_id:
+                                # Normalize the path to be relative to repo root
+                                # If path doesn't start with "openspec", prepend it
+                                norm_path = entry_path.strip('/')
+                                if not norm_path.startswith('openspec/'):
+                                    norm_path = f"openspec/{norm_path}"
+                                self.write_spec_file(task_id, norm_path, content, use_system_temp)
                         except Exception as e:
                             print(f"Error reading {entry_path}: {e}")
                             continue
