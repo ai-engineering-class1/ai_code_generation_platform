@@ -24,6 +24,11 @@ services:
       - POSTGRES_USER=aicode
       - POSTGRES_PASSWORD=aicode123
       - POSTGRES_DB=ai_code_platform
+      # Claude CLI Configuration
+      - CLAUDE_EXECUTABLE_PATH=claude
+      - ANTHROPIC_AUTH_TOKEN=${ANTHROPIC_AUTH_TOKEN}
+      - ANTHROPIC_BASE_URL=https://open.bigmodel.cn/api/anthropic
+      - API_TIMEOUT_MS=600000
     volumes:
       - ./backend:/app # Optional: for hot reloading/config access
 
