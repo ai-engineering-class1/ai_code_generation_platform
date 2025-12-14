@@ -9,7 +9,15 @@ RUN apt-get update && apt-get install -y \
     gcc \
     libpq-dev \
     curl \
+    gnupg \
+    git \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && npm install -g @anthropic-ai/claude-code \
     && rm -rf /var/lib/apt/lists/*
+
+# Verify claude installation
+RUN claude --version
 
 # Install python dependencies
 COPY requirements.txt .
