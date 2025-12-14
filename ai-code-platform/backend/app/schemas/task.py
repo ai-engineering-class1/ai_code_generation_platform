@@ -130,11 +130,22 @@ class CodeGenerationResponse(BaseModel):
 class WorkflowHistoryResponse(BaseModel):
     id: str
     task_id: str
-    from_stage: Optional[str] = None
-    to_stage: Optional[str] = None
+    from_stage: Optional[str] = Field(None, alias="fromStage")
+    to_stage: Optional[str] = Field(None, alias="toStage")
+    title: Optional[str] = None
     status: Optional[str] = None
+    operator_id: Optional[str] = Field(None, alias="operatorId")
+    action: Optional[str] = None
+    result: Optional[str] = None
+    situation: Optional[str] = None
+    activity_start_at: Optional[datetime] = Field(None, alias="activityStartAt")
+    activity_end_at: Optional[datetime] = Field(None, alias="activityEndAt")
+    activity_type: Optional[str] = Field(None, alias="activityType")
+    is_public: Optional[bool] = Field(True, alias="isPublic")
+    task_role: Optional[str] = Field(None, serialization_alias="task")
+    tie_back: Optional[str] = Field(None, alias="tieBack")
     metadata: Optional[dict] = Field(None, alias="workflow_metadata")
-    created_at: datetime
+    created_at: datetime = Field(alias="createdAt")
     
     class Config:
         from_attributes = True
@@ -159,6 +170,6 @@ class PipelineExecutionResponse(BaseModel):
 class TaskDetailResponse(TaskResponse):
     """Extended task response with related entities"""
     specification: Optional[SpecificationResponse] = None
-    code_generation: Optional[CodeGenerationResponse] = None
-    workflow_history: List[WorkflowHistoryResponse] = []
+    code_generation: Optional[CodeGenerationResponse] = Field(None, alias="codeGeneration")
+    workflow_history: List[WorkflowHistoryResponse] = Field([], alias="workflowHistory")
 

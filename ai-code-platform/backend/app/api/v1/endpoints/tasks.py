@@ -108,7 +108,7 @@ async def get_task(
         )
     
     from app.models.workflow import Specification, CodeGeneration
-    from app.models.notification import TaskWorkflowHistory
+    from app.models.task import TaskWorkflowHistory
     
     print(f"Fetching task: task_id={task_id}, project_id={project_id}")
     task = db.query(Task).filter(

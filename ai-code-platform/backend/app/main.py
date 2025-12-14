@@ -17,7 +17,7 @@ from app.core.database import Base, engine
 from app.models import user, project, task, integration, workflow, notification
 from app.models.user import User  # Explicitly import User for Task relationship
 from app.models.project import Project  # Explicitly import Project for Task relationship
-from app.models.notification import TaskWorkflowHistory  # Explicitly import for relationship resolution
+from app.models.task import TaskWorkflowHistory  # Explicitly import for relationship resolution
 from app.models.workflow import Specification, CodeGeneration  # Explicitly import for relationship resolution
 
 # Create database tables
