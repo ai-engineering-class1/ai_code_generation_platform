@@ -19,7 +19,7 @@ services:
       - REDIS_HOST=host.docker.internal
       - REDIS_PORT=4502
       # Ensure CORS allows our new frontend port
-      - CORS_ORIGINS=http://localhost:4530,http://127.0.0.1:4530
+      - CORS_ORIGINS=["http://localhost:4530","http://127.0.0.1:4530","http://localhost:3012"]
       # Keep other credentials managed by the app's .env or add them here if needed
       - POSTGRES_USER=aicode
       - POSTGRES_PASSWORD=aicode123
