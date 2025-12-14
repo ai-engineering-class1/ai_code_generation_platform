@@ -346,6 +346,12 @@ function EditorContent() {
 
         setIsLoading(true);
         try {
+            // Ensure backend session has the latest repo context before pushing
+            await api.updateProjectContext(projectId, {
+                owner: project.owner,
+                repository: project.repository
+            });
+
             const branchName = `openspec-changes-${Date.now()}`;
             await api.pushToGitHub(projectId, taskId || undefined, branchName);
             toast.success(`Pushed to GitHub branch: ${branchName}`);

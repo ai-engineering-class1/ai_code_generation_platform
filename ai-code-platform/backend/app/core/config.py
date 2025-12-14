@@ -60,9 +60,6 @@ class Settings(BaseSettings):
     # Logging
     LOG_LEVEL: str = "INFO"
     
-    # Temp directory for OpenSpec workspaces (defaults to system temp if not set)
-    TEMP_DIR: str = ""
-    
     class Config:
         env_file = ".env"
         case_sensitive = True

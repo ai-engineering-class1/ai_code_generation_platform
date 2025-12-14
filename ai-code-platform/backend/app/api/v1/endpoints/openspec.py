@@ -23,7 +23,8 @@ user_sessions: Dict[str, Dict[str, Any]] = {}
 task_manager: Dict[str, Dict[str, Any]] = {}
 
 # Services
-openspec_service = OpenSpecService("./temp_openspec")
+# Workspace root should be under backend/temp/<taskId>/codebase/simplestrepo/...
+openspec_service = OpenSpecService("./temp")
 claude_service = ClaudeService()
 
 # Helper for GitHub Logic using GitHub Service Proxy
@@ -52,8 +53,7 @@ class SimpleGitHubClient:
                     print("Branch created successfully.")
                     return True
                 else:
-                    text = await resp.text() if hasattr(resp, 'text') else resp.text
-                    print(f"Failed to create branch: {resp.status_code} - {text}")
+                    print(f"Failed to create branch: {resp.status_code} - {resp.text}")
                     # Branch might already exist, which is okay
                     return False
             except Exception as e:
@@ -70,8 +70,8 @@ class SimpleGitHubClient:
         for file in files:
             formatted_files.append({
                 "path": file["path"],
-                "content": file["content"],
-                "encoding": "utf-8"
+                "content": file.get("content"),
+                "encoding": file.get("encoding", "utf-8")
             })
         
         async with httpx.AsyncClient(timeout=60.0) as client:
@@ -92,8 +92,7 @@ class SimpleGitHubClient:
                     print("Changes pushed successfully.")
                     return True
                 else:
-                    text = await resp.text() if hasattr(resp, 'text') else resp.text
-                    print(f"Failed to push changes: {resp.status_code} - {text}")
+                    print(f"Failed to push changes: {resp.status_code} - {resp.text}")
                     return False
             except Exception as e:
                 print(f"Error pushing changes: {e}")
@@ -148,15 +147,20 @@ async def upload_openspec(project_id: str, taskId: str = None, openspecFile: Upl
     if not validation.get("isValid"):
         raise HTTPException(status_code=400, detail=f"Invalid OpenSpec structure. {validation}")
     
-    # Save uploaded zip
-    file_path = await openspec_service.save_uploaded_file(project_id, openspecFile.filename, content)
+    # Do NOT store the uploaded zip under temp_openspec/<id>.
+    # We only extract markdown files into:
+    #   backend/temp/<taskId>/codebase/simplestrepo/openspec/changes/...
+    # (Optionally, we could store zips under openspec/uploads, but not required for editing.)
+    file_path = ""
     
-    # Extract content and write to workspace
+    # Extract content and write to workspace (unzip ALL files, not only .md)
+    change_set = (openspecFile.filename or "change").replace(".zip", "")
     spec_content = openspec_service.extract_content(
-        content, 
+        content,
         task_id=taskId or project_id,
         write_to_disk=True,
-        use_system_temp=True
+        use_system_temp=False,
+        change_set=change_set
     )
     
     # Merge with existing tree instead of replacing
@@ -244,7 +248,7 @@ async def update_specification(project_id: str, spec_id: str, update: Specificat
     
     if spec_path:
         try:
-            openspec_service.write_spec_file(task_id, spec_path, update.content, use_system_temp=True)
+            openspec_service.write_spec_file(task_id, spec_path, update.content, use_system_temp=False)
         except Exception as e:
             print(f"Warning: Failed to write spec file to disk: {e}")
     
@@ -425,7 +429,7 @@ async def init_from_workspace(project_id: str, taskId: str = None):
     
     try:
         # Build tree from existing workspace
-        spec_content = openspec_service.build_tree_from_directory(task_id, use_system_temp=True)
+        spec_content = openspec_service.build_tree_from_directory(task_id, use_system_temp=False)
         
         if not spec_content["specTree"]:
             return {
@@ -472,22 +476,10 @@ async def push_to_github(project_id: str, taskId: str = None, branchName: str = 
         raise HTTPException(status_code=400, detail="Project owner and repository must be set. Please configure them in the Project section of the editor.")
     
     try:
-        # Collect files from specTree first
-        spec_tree = project.get("specTree", [])
-        files_to_push = []
-        
-        def collect_specs(nodes):
-            for node in nodes:
-                if node.get("type") == "specification" and node.get("content"):
-                    path = node["path"]
-                    # Ensure path starts with openspec/
-                    if not path.startswith("openspec/"):
-                        path = f"openspec/{path}"
-                    files_to_push.append({"path": path, "content": node["content"]})
-                if node.get("children"):
-                    collect_specs(node["children"])
-        
-        collect_specs(spec_tree)
+        # Collect files from the on-disk workspace under:
+        #   backend/temp/<taskId>/codebase/simplestrepo/openspec/changes/**
+        # This matches the required behavior and avoids relying on in-memory specTree state.
+        files_to_push = openspec_service.collect_changes_files_for_push(task_id, use_system_temp=False)
         
         if not files_to_push:
             return {"success": False, "message": "No files to push. Please upload an OpenSpec file first."}
@@ -530,7 +522,7 @@ async def export_openspec_changes(project_id: str, taskId: str = None):
     task_id = taskId or (project.get("taskId") if project else None) or project_id
     
     try:
-        zip_content = openspec_service.export_changes_as_zip(task_id, use_system_temp=True)
+        zip_content = openspec_service.export_changes_as_zip(task_id, use_system_temp=False)
         
         # Create filename with task_id
         filename = f"openspec-changes-{task_id}.zip"

@@ -38,12 +38,6 @@ def get_enriched_env():
     return env
 
 @router.websocket("/ws")
-<<<<<<< Updated upstream
-async def websocket_endpoint(websocket: WebSocket, cols: int = Query(80), rows: int = Query(24)):
-    await websocket.accept()
-    session = RestrictedShell(websocket, rows=rows, cols=cols)
-    await session.run()
-=======
 async def websocket_endpoint(websocket: WebSocket):
     """
     WebSocket entrypoint for the web terminal.
@@ -59,7 +53,6 @@ async def websocket_endpoint(websocket: WebSocket):
         await session.run()
     else:
         await run_full_shell_session(websocket)
->>>>>>> Stashed changes
 
 class RestrictedShell:
     def __init__(self, websocket: WebSocket, rows: int = 24, cols: int = 80):
@@ -469,10 +462,6 @@ class RestrictedShell:
             except Exception as e:
                 print(f"DEBUG: Error terminating process: {e}")
             self.proc_obj = None
-<<<<<<< Updated upstream
-
-
-=======
 
 
 async def run_full_shell_session(websocket: WebSocket):
@@ -676,5 +665,3 @@ async def run_full_shell_session(websocket: WebSocket):
         print(f"Terminal failed to start: {e}")
         traceback.print_exc()
         await websocket.close()
-
->>>>>>> Stashed changes
