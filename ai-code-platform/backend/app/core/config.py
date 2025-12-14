@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     
     # Claude/Anthropic
     ANTHROPIC_API_KEY: str = ""
+    # Claude Code CLI
+    ANTHROPIC_AUTH_TOKEN: str = ""
+    ANTHROPIC_BASE_URL: str = ""
+    API_TIMEOUT_MS: int = 600000
+    CLAUDE_EXECUTABLE_PATH: str = "claude"
     
     # Terminal
     TERMINAL_SAFE_MODE: bool = True
