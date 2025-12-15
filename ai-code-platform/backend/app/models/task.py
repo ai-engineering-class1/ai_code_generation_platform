@@ -46,6 +46,12 @@ class TaskPriority(str, enum.Enum):
     CRITICAL = "critical"
 
 
+class ActivityStatus(str, enum.Enum):
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 class Task(Base):
     __tablename__ = "tasks"
     
@@ -79,7 +85,7 @@ class TaskWorkflowHistory(Base):
     # Workflow transitions
     from_stage = Column(String(50))
     to_stage = Column(String(50))
-    status = Column(String(50))
+    status = Column(String(50)) # Kept as String for backward compatibility with older data, but logically mapped to ActivityStatus
     
     # Operator info
     operator_id = Column(String)
