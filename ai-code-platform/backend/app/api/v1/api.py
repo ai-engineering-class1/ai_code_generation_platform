@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, projects, tasks, jira, github, notifications, openspec, terminal
+from app.api.v1.endpoints import auth, projects, tasks, jira, github, notifications, openspec, terminal, activities
 
 api_router = APIRouter()
 
@@ -11,4 +11,5 @@ api_router.include_router(github.router, prefix="/github", tags=["github"])
 api_router.include_router(notifications.router, tags=["notifications"])
 api_router.include_router(openspec.router, prefix="/openspec", tags=["openspec"])
 api_router.include_router(terminal.router, prefix="/terminal", tags=["terminal"])
+api_router.include_router(activities.router, prefix="/activities", tags=["activities"])
 
