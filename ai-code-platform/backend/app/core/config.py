@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     TERMINAL_SAFE_MODE: bool = True
     
     # CORS
-    CORS_ORIGINS: List[str] = ["http://localhost:3012", "http://localhost:3000"]
+    CORS_ORIGINS: List[str] = ["http://localhost:3012", "http://localhost:3000", "http://127.0.0.1:3012"]
     
     # Celery
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
