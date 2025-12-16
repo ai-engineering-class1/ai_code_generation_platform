@@ -43,7 +43,18 @@ service.update_activity(
 )
 ```
 
-### 3. End Activity (Conclusion)
+### 3. Stream Action (Streaming)
+Call this to append text to the current action without overwriting it.
+
+```python
+service.append_activity_action(
+    db=db,
+    activity_id=activity.id,
+    action_chunk="... Test 1 Passed.\n"
+)
+```
+
+### 4. End Activity (Conclusion)
 Call this when the step is finished. This **Freezes** the activity.
 *   **Required**: `result`.
 *   **Effect**: Sets `activity_end_at = Now`. Previous fields (Situation, Action) become Read-Only.
@@ -71,12 +82,26 @@ service.update_tie_back(
 )
 ```
 
+## Architecture Note: Frontend vs Backend Polling
+
+**Current Strategy: Frontend-Driven Sync**
+For the current "Demo" phase, the Frontend is responsible for:
+1.  Polling the Remote Agent status.
+2.  Pushing updates to the Activity Log (via `append_activity_action`).
+3.  Finalizing the Activity (via `end_activity`) when the Remote Agent finishes.
+
+**Trade-off**: If the user closes the browser, the Activity Log update process will stop (The remote agent continues running, but our log won't reflect the result until someone opens the page again).
+
+**Future Improvement (Robustness)**:
+Move the polling logic to a background worker (e.g., Celery/Redis Queue). The worker would independently monitor the Remote Agent and update the Activity Log, ensuring data consistency even without an active browser session.
+
 ## STAR-T Lifecycle Matrix
 
 | Stage | Method | Status | Mutable Fields | Logic |
 | :--- | :--- | :--- | :--- | :--- |
 | **Start** | `start_activity` | `IN_PROGRESS` | **S, T** | Define context & goal. |
 | **Exec** | `update_activity` | `IN_PROGRESS` | **A, S** | Log actions & refinements. |
+| **Exec** | `append_activity_action` | `IN_PROGRESS` | **A (Append)** | Stream log actions. |
 | **End** | `end_activity` | `COMPLETED` | **R, T, Status** | Seal with a result. |
 | **Archive**| `update_tie_back`| `COMPLETED` | **T** only | Add hindsight insights. |
 

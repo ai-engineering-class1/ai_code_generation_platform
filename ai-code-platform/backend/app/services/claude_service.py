@@ -154,19 +154,26 @@ Provide your review in a structured format.
             print(f"Error reviewing code: {e}")
             return {"review": "", "approved": False}
     
-    async def assign_to_agent(self) -> Dict[str, Any]:
-        """Assign task to remote Claude Web API agent - quick demo"""
-        CLAUDE_WEB_API_URL = "http://103.98.213.149:8520"
+    async def assign_to_agent(self, repo_url: str) -> Dict[str, Any]:
+        """
+        Assign task to remote Claude Web API agent.
+        
+        Args:
+            repo_url: URL of the repository to work on.
+        """
+        CLAUDE_WEB_API_URL = settings.CLAUDE_WEB_API_URL
+        
+        # In future, we might use token: headers={"Authorization": f"Bearer {settings.CLAUDE_WEB_API_TOKEN}"}
         
         payload = {
             "taskType": "feature-implementation",
-            "repoUrl": "https://github.com/DrLinAITeam2/simplest-repo",
+            "repoUrl": repo_url,
             "prompt": "Please implement the OpenSpec change under openspec/changes",
             "maxTurns": 25
         }
         
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=float(settings.REMOTE_AGENT_TIMEOUT_SEC)) as client:
                 response = await client.post(f"{CLAUDE_WEB_API_URL}/tasks", json=payload)
                 response.raise_for_status()
                 return response.json()
@@ -176,10 +183,10 @@ Provide your review in a structured format.
     
     async def get_agent_task(self, task_id: str) -> Dict[str, Any]:
         """Get task status from remote Claude Web API agent"""
-        CLAUDE_WEB_API_URL = "http://103.98.213.149:8520"
+        CLAUDE_WEB_API_URL = settings.CLAUDE_WEB_API_URL
         
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=float(settings.REMOTE_AGENT_TIMEOUT_SEC)) as client:
                 response = await client.get(f"{CLAUDE_WEB_API_URL}/tasks/{task_id}")
                 response.raise_for_status()
                 return response.json()

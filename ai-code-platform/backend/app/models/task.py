@@ -92,7 +92,7 @@ class TaskWorkflowHistory(Base):
     
     # Timing
     activity_start_at = Column(DateTime(timezone=True), server_default=func.now())
-    activity_end_at = Column(DateTime(timezone=True), server_default=func.now())
+    activity_end_at = Column(DateTime(timezone=True), nullable=True)
     
     # STAR Framework
     situation = Column(Text)

@@ -28,6 +28,9 @@ class ActivityUpdate(BaseModel):
     action: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
 
+class ActivityAppend(BaseModel):
+    action_chunk: str
+
 class ActivityEnd(BaseModel):
     result: str
     status: ActivityStatus = ActivityStatus.COMPLETED
