@@ -247,9 +247,9 @@ export default function Terminal({ isOpen, onClose, mode = 'fixed', onStatusChan
 
     if (!isOpen) return null;
 
-    const fixedClasses = `fixed bottom-0 left-0 right-0 bg-[#1e1e1e] border-t border-gray-700 shadow-2xl transition-all duration-300 z-50 flex flex-col ${isMinimized ? 'h-10' : (isMaximized ? 'h-[80vh]' : 'h-64')}`;
+    const fixedClasses = `fixed bottom-0 left-0 right-0 bg-[#1e1e1e] border-t border-gray-700 shadow-2xl z-50 flex flex-col ${isMinimized ? 'h-10' : (isMaximized ? 'h-[80vh]' : 'h-64')}`;
     const embeddedClasses = `h-full w-full bg-[#1e1e1e] flex flex-col`;
-    const popupClasses = `fixed ${isMinimized ? 'bottom-0 left-4 w-[300px] h-10 translate-y-0 translate-x-0' : 'top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[900px] h-[600px]'} bg-[#1e1e1e] border border-gray-700 shadow-2xl z-50 flex flex-col rounded-lg overflow-hidden transition-all duration-300`;
+    const popupClasses = `fixed ${isMinimized ? 'bottom-0 left-4 w-[300px] h-10 translate-y-0 translate-x-0' : 'top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[900px] h-[600px]'} bg-[#1e1e1e] border border-gray-700 shadow-2xl z-50 flex flex-col rounded-lg overflow-hidden`;
 
     return (
         <div
