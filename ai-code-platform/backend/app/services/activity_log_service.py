@@ -114,6 +114,34 @@ class ActivityLogService:
         db.refresh(activity)
         return activity
 
+    def append_activity_action(
+        self,
+        db: Session,
+        activity_id: str,
+        action_chunk: str
+    ) -> Optional[TaskWorkflowHistory]:
+        """
+        Appends text to the 'Action' field.
+        Useful for true streaming (e.g., token-by-token or line-by-line updates).
+        """
+        activity = db.query(TaskWorkflowHistory).filter(TaskWorkflowHistory.id == activity_id).with_for_update().first()
+        if not activity:
+            return None
+            
+        if activity.activity_end_at is not None:
+             raise ValueError(f"Cannot append to Action for frozen Activity {activity_id}.")
+        
+        current_action = activity.action or ""
+        # Append with newline if not empty? Or raw append?
+        # Usually for log streaming, raw append or space separated is better.
+        # But 'Action' is usually a description. Let's assume raw append gives most control.
+        # User can send "\nNew line" if they want.
+        activity.action = current_action + action_chunk
+        
+        db.commit()
+        db.refresh(activity)
+        return activity
+
     def update_tie_back(
         self,
         db: Session,

@@ -8,7 +8,8 @@ from app.models.user import User
 from app.services.activity_log_service import ActivityLogService
 from app.schemas.activity import (
     ActivityCreate, 
-    ActivityUpdate, 
+    ActivityUpdate,
+    ActivityAppend,
     ActivityEnd, 
     ActivityTieBackUpdate, 
     ActivityResponse
@@ -54,6 +55,28 @@ async def update_activity(
             activity_id=activity_id,
             action=activity_in.action,
             metadata=activity_in.metadata
+        )
+        if not activity:
+            raise HTTPException(status_code=404, detail="Activity not found")
+        return activity
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/{activity_id}/append", response_model=ActivityResponse)
+async def append_activity_action(
+    activity_id: str,
+    activity_in: ActivityAppend,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Append text to the Action field (Streaming).
+    """
+    try:
+        activity = service.append_activity_action(
+            db=db,
+            activity_id=activity_id,
+            action_chunk=activity_in.action_chunk
         )
         if not activity:
             raise HTTPException(status_code=404, detail="Activity not found")

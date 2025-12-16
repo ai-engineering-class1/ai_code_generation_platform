@@ -43,7 +43,18 @@ service.update_activity(
 )
 ```
 
-### 3. End Activity (Conclusion)
+### 3. Stream Action (Streaming)
+Call this to append text to the current action without overwriting it.
+
+```python
+service.append_activity_action(
+    db=db,
+    activity_id=activity.id,
+    action_chunk="... Test 1 Passed.\n"
+)
+```
+
+### 4. End Activity (Conclusion)
 Call this when the step is finished. This **Freezes** the activity.
 *   **Required**: `result`.
 *   **Effect**: Sets `activity_end_at = Now`. Previous fields (Situation, Action) become Read-Only.
@@ -77,6 +88,7 @@ service.update_tie_back(
 | :--- | :--- | :--- | :--- | :--- |
 | **Start** | `start_activity` | `IN_PROGRESS` | **S, T** | Define context & goal. |
 | **Exec** | `update_activity` | `IN_PROGRESS` | **A, S** | Log actions & refinements. |
+| **Exec** | `append_activity_action` | `IN_PROGRESS` | **A (Append)** | Stream log actions. |
 | **End** | `end_activity` | `COMPLETED` | **R, T, Status** | Seal with a result. |
 | **Archive**| `update_tie_back`| `COMPLETED` | **T** only | Add hindsight insights. |
 
