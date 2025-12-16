@@ -82,6 +82,19 @@ service.update_tie_back(
 )
 ```
 
+## Architecture Note: Frontend vs Backend Polling
+
+**Current Strategy: Frontend-Driven Sync**
+For the current "Demo" phase, the Frontend is responsible for:
+1.  Polling the Remote Agent status.
+2.  Pushing updates to the Activity Log (via `append_activity_action`).
+3.  Finalizing the Activity (via `end_activity`) when the Remote Agent finishes.
+
+**Trade-off**: If the user closes the browser, the Activity Log update process will stop (The remote agent continues running, but our log won't reflect the result until someone opens the page again).
+
+**Future Improvement (Robustness)**:
+Move the polling logic to a background worker (e.g., Celery/Redis Queue). The worker would independently monitor the Remote Agent and update the Activity Log, ensuring data consistency even without an active browser session.
+
 ## STAR-T Lifecycle Matrix
 
 | Stage | Method | Status | Mutable Fields | Logic |

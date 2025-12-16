@@ -74,7 +74,7 @@ def update_schema():
         new_columns = {
             'operator_id': 'VARCHAR',
             'activity_start_at': 'TIMESTAMP WITH TIME ZONE DEFAULT NOW()',
-            'activity_end_at': 'TIMESTAMP WITH TIME ZONE DEFAULT NOW()',
+            'activity_end_at': 'TIMESTAMP WITH TIME ZONE DEFAULT NULL',
             'situation': 'TEXT',
             'task_role': 'TEXT',
             'action': 'TEXT',
@@ -161,6 +161,20 @@ def update_schema():
         except Exception as e:
             print(f"Error updating task_workflow_history: {e}")
 
+
+        try:
+            print("\nEnsuring activity_end_at has no default value (fix for freezing bug)...")
+            conn.execute(text("ALTER TABLE task_workflow_history ALTER COLUMN activity_end_at DROP DEFAULT"))
+            # Also drop NOT NULL if it exists, to allow active activities
+            try:
+                 conn.execute(text("ALTER TABLE task_workflow_history ALTER COLUMN activity_end_at DROP NOT NULL"))
+            except Exception:
+                 pass
+            conn.commit()
+            print("✓ activity_end_at default dropped")
+        except Exception as e:
+            # It might fail if default didn't exist, which is fine
+            print(f"Note: Could not drop default (might not exist): {e}")
 
 if __name__ == "__main__":
     update_schema()

@@ -55,6 +55,9 @@ export default function TaskDetailPage({
 
   const queryClient = useQueryClient()
   const [agentTaskId, setAgentTaskId] = useState<string | null>(null)
+  // State for Activity Sync
+  const [currentActivityId, setCurrentActivityId] = useState<string | null>(null)
+  const [lastSyncedStatus, setLastSyncedStatus] = useState<string | null>(null)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [expandedActivityIds, setExpandedActivityIds] = useState<Set<string>>(new Set())
   const [isSearchOpen, setIsSearchOpen] = useState(false)
@@ -351,12 +354,45 @@ export default function TaskDetailPage({
     },
     enabled: !!agentTaskId,
     refetchInterval: (query) => {
-      // Poll every 5 seconds if task is still pending/running
-      // Note: Timer starts AFTER previous request completes, so no congestion
-      if (query.state.data?.status === 'completed') return false
-      return 5000
+      // Poll every 2 seconds if task is running
+      if (query.state.data?.status === 'completed' || query.state.data?.status === 'failed') return false
+      return 2000
     },
   })
+
+  // Sync Loop: Push Agent Status Updates to Activity Log
+  useEffect(() => {
+    if (!agentTask || !currentActivityId) return
+
+    const status = agentTask.status
+    const result = agentTask.result
+
+    // 1. Status Change -> Append Action
+    if (status !== lastSyncedStatus) {
+      if (lastSyncedStatus !== null) { // Don't append on first load unless you want to
+        const actionMsg = `Remote Agent Status: ${status}\n`
+        appendActivityMutation.mutate({ id: currentActivityId, action: actionMsg })
+      }
+      setLastSyncedStatus(status)
+
+      // 2. Completion/Failure -> End Activity (Result)
+      // Moved INSIDE the sentinel check to prevent double-ending
+      if (status === 'completed') {
+        const resultSummary = `Agent Completed.\nDuration: ${agentTask.executionMetrics?.durationMs}ms\nCost: $${agentTask.executionMetrics?.totalCostUsd}\nResult: ${JSON.stringify(result?.result || 'Success')}`
+        endActivityMutation.mutate({
+          id: currentActivityId,
+          result: resultSummary,
+          status: 'completed'
+        })
+      } else if (status === 'failed') {
+        endActivityMutation.mutate({
+          id: currentActivityId,
+          result: `Agent Failed. Error: ${JSON.stringify(result)}`,
+          status: 'failed'
+        })
+      }
+    }
+  }, [agentTask, currentActivityId]) // Run whenever agentTask updates
   // Initialize form data when task loads
   useEffect(() => {
     if (task) {
@@ -375,7 +411,12 @@ export default function TaskDetailPage({
       )
       if (activeActivity) {
         if (!agentTaskId) {
-          setAgentTaskId(activeActivity.id)
+          // Try to recover remote_task_id from workflow_metadata
+          const meta = (activeActivity as any).workflow_metadata
+          if (meta?.remote_task_id) {
+            setAgentTaskId(meta.remote_task_id)
+            setCurrentActivityId(activeActivity.id)
+          }
         }
         // Auto-expand active activity by default
         setExpandedActivityIds(prev => new Set(prev).add(activeActivity.id))
@@ -409,21 +450,51 @@ export default function TaskDetailPage({
 
 
 
+
+
   const assignToAgentMutation = useMutation({
     mutationFn: async () => {
-      // Call local backend which proxies to remote Claude Web API
-      const response = await apiClient.post('/projects/assign-to-agent')
+      // Call new endpoint which returns an Activity object
+      const response = await apiClient.post(`/projects/${projectId}/tasks/${taskId}/assign`)
       return response.data
     },
-    onSuccess: (data) => {
-      if (data.taskId) {
-        setAgentTaskId(data.taskId)
+    onSuccess: (activity) => {
+      // activity is the ActivityLog object
+      // Backend returns 'workflow_metadata' (renamed from metadata)
+      if (activity.workflow_metadata?.remote_task_id) {
+        setAgentTaskId(activity.workflow_metadata.remote_task_id)
+        setCurrentActivityId(activity.id)
+        setLastSyncedStatus('dispatched') // Initial status
       }
-      alert(`Task assigned to agent successfully! Task ID: ${data.taskId || 'assigned'}`)
+      queryClient.invalidateQueries({ queryKey: ['task', projectId, taskId] })
+      alert(`Task assigned to agent! Remote Task ID: ${activity.workflow_metadata?.remote_task_id}`)
     },
     onError: (error: any) => {
       alert(`Failed to assign to agent: ${error.response?.data?.detail || error.message}`)
     },
+  })
+
+  // Mutation to Append Updates to Activity Log
+  const appendActivityMutation = useMutation({
+    mutationFn: async ({ id, action }: { id: string, action: string }) => {
+      await apiClient.post(`/activities/${id}/append`, { action })
+    }
+  })
+
+  // Mutation to End Activity (Final Result)
+  const endActivityMutation = useMutation({
+    mutationFn: async ({ id, result, status }: { id: string, result: string, status: string }) => {
+      await apiClient.post(`/activities/${id}/end`, { result, status })
+    },
+    onSuccess: async () => {
+      // Invalidate and explicitly refetch to ensure UI updates immediately
+      await queryClient.invalidateQueries({ queryKey: ['task', projectId, taskId] })
+      await queryClient.refetchQueries({ queryKey: ['task', projectId, taskId] })
+
+      setAgentTaskId(null)
+      setCurrentActivityId(null)
+      setLastSyncedStatus(null)
+    }
   })
 
   const updateTaskMutation = useMutation({
@@ -448,8 +519,9 @@ export default function TaskDetailPage({
   })
 
   // Split into Active (in_progress) and Past (log)
+  // Fix: Exclude "dead" activities that might have an end time but stuck status (from previous bugs)
   const activeActivities = sortedActivities.filter(a =>
-    a.status === 'in_progress' || a.status === 'running'
+    (a.status === 'in_progress' || a.status === 'running') && !a.activityEndAt
   )
 
   // Filter Past Activities based on Search Criteria
