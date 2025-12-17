@@ -157,3 +157,12 @@ Snapshots of system state relevant to the specific activity iteration.
   }
 }
 ```
+### 4. Remote Task Context
+Logs the remote task's metadata.
+
+```json
+{
+  "remote_task_id": "1Tlpie9QIxovioFK8IJyE",
+  "remote_status": "dispatched"
+}
+```
