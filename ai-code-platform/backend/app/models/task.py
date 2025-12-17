@@ -48,6 +48,7 @@ class TaskPriority(str, enum.Enum):
 
 class ActivityStatus(str, enum.Enum):
     IN_PROGRESS = "in_progress"
+    PENDING_USER_INPUT = "pending_user_input"
     COMPLETED = "completed"
     FAILED = "failed"
 
