@@ -48,7 +48,7 @@ class GitHubConfigBase(CamelCaseModel):
 
 class GitHubConfigCreate(GitHubConfigBase):
     project_id: str = Field(..., alias="projectId")
-    access_token: str = Field(..., alias="accessToken")
+    access_token: Optional[str] = Field(None, alias="accessToken")
 
 
 class GitHubConfigUpdate(CamelCaseModel):
