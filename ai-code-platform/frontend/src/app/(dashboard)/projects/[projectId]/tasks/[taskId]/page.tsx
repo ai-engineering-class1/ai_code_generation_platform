@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
-import { ArrowLeft, Clock, User, FileText, GitPullRequest, CheckCircle2, AlertCircle, X, Bot, DollarSign, Timer, Zap, Edit, ChevronDown, ChevronUp, Search, Filter, Calendar } from 'lucide-react'
+import { ArrowLeft, Clock, User, FileText, GitPullRequest, CheckCircle2, AlertCircle, X, Bot, DollarSign, Timer, Zap, Edit, ChevronDown, ChevronUp, Search, Filter, Calendar, Database } from 'lucide-react'
 import apiClient from '@/lib/api'
 import { TaskDetail, User as UserType } from '@/types'
 import Dashboard from '@/components/openspec/Dashboard'
@@ -71,6 +71,10 @@ export default function TaskDetailPage({
     startDate: '', // 'YYYY-MM-DDTHH:mm'
     endDate: '',
   })
+  const [isManualHandleModalOpen, setIsManualHandleModalOpen] = useState(false)
+  const [manualHandleActivityId, setManualHandleActivityId] = useState<string | null>(null)
+  const [manualHandleAction, setManualHandleAction] = useState('')
+  const [manualHandleResult, setManualHandleResult] = useState('')
   const [editFormData, setEditFormData] = useState({
     title: '',
     description: '',
@@ -147,6 +151,15 @@ export default function TaskDetailPage({
     enabled: !!projectId
   })
 
+  // Fetch current user
+  const { data: currentUser } = useQuery({
+    queryKey: ['currentUser'],
+    queryFn: async () => {
+      const response = await apiClient.get('/auth/me')
+      return response.data
+    }
+  })
+
   // Fetch users for assignee dropdown
   const { data: users = [] } = useQuery<UserType[]>({
     queryKey: ['users'],
@@ -218,8 +231,9 @@ export default function TaskDetailPage({
               {/* Status Badge */}
               {activity.status && (
                 <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${activity.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
-                  activity.status === 'failed' ? 'bg-red-100 text-red-700' :
-                    'bg-gray-100 text-gray-600'
+                  activity.status === 'pending_user_input' ? 'bg-yellow-100 text-yellow-800' :
+                    activity.status === 'failed' ? 'bg-red-100 text-red-700' :
+                      'bg-gray-100 text-gray-600'
                   }`}>
                   {activity.status}
                 </span>
@@ -332,9 +346,41 @@ export default function TaskDetailPage({
                 )}
 
                 {/* Raw Metadata (if available) */}
-                {activity.metadata && Object.keys(activity.metadata).length > 0 && (
+                {activity.workflow_metadata && Object.keys(activity.workflow_metadata).length > 0 && (
                   <div className="mt-2 pt-2 border-t border-gray-100">
-                    <span className="text-xs text-gray-400 font-mono">Metadata: {JSON.stringify(activity.metadata)}</span>
+                    <h4 className="flex items-center gap-2 text-indigo-600 font-bold text-xs uppercase tracking-wider mb-1">
+                      <Database className="w-3 h-3" /> Workflow Metadata
+                    </h4>
+                    <pre className="text-xs text-gray-600 bg-gray-50 p-2 rounded overflow-x-auto border border-gray-100">
+                      {JSON.stringify(activity.workflow_metadata, null, 2)}
+                    </pre>
+                  </div>
+                )}
+
+                {/* Active Activity Actions */}
+                {isActiveSection && (
+                  <div className="mt-4 pt-3 border-t border-blue-100 flex gap-3">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        alert("To be implemented: Agent assignment flow")
+                      }}
+                      className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+                    >
+                      Assign Agent
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setManualHandleActivityId(activity.id)
+                        setManualHandleAction('')
+                        setManualHandleResult('')
+                        setIsManualHandleModalOpen(true)
+                      }}
+                      className="px-3 py-1.5 text-xs font-medium bg-white text-gray-700 border border-gray-300 rounded hover:bg-gray-50 transition"
+                    >
+                      Manually Handled
+                    </button>
                   </div>
                 )}
               </div>
@@ -477,7 +523,7 @@ export default function TaskDetailPage({
   // Mutation to Append Updates to Activity Log
   const appendActivityMutation = useMutation({
     mutationFn: async ({ id, action }: { id: string, action: string }) => {
-      await apiClient.post(`/activities/${id}/append`, { action })
+      await apiClient.post(`/activities/${id}/append`, { action_chunk: action })
     }
   })
 
@@ -521,13 +567,13 @@ export default function TaskDetailPage({
   // Split into Active (in_progress) and Past (log)
   // Fix: Exclude "dead" activities that might have an end time but stuck status (from previous bugs)
   const activeActivities = sortedActivities.filter(a =>
-    (a.status === 'in_progress' || a.status === 'running') && !a.activityEndAt
+    (a.status === 'in_progress' || a.status === 'running' || a.status === 'pending_user_input') && !a.activityEndAt
   )
 
   // Filter Past Activities based on Search Criteria
   const filteredPastActivities = sortedActivities.filter(a => {
     // 1. Exclude active
-    if (a.status === 'in_progress' || a.status === 'running') return false
+    if (a.status === 'in_progress' || a.status === 'running' || a.status === 'pending_user_input') return false
 
     // 2. Query (Full Text) - checks title, action, result, situation, operatorId
     if (searchFilters.query) {
@@ -587,6 +633,42 @@ export default function TaskDetailPage({
     if (editFormData.currentStage !== task?.currentStage) updateData.current_stage = editFormData.currentStage
 
     updateTaskMutation.mutate(updateData)
+  }
+
+  const handleManualHandleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!manualHandleActivityId || (!manualHandleAction.trim() && !manualHandleResult.trim())) return
+
+    const operatorName = currentUser?.name || currentUser?.email || 'Unknown User'
+    const fullAction = `\n[Manual User: ${operatorName}]: ${manualHandleAction}`
+
+    // Chain: Append -> End
+    appendActivityMutation.mutate(
+      { id: manualHandleActivityId, action: fullAction },
+      {
+        onSuccess: () => {
+          endActivityMutation.mutate({
+            id: manualHandleActivityId,
+            result: manualHandleResult || 'Manually handled by user.',
+            status: 'completed'
+          }, {
+            onSuccess: () => {
+              setIsManualHandleModalOpen(false)
+              setManualHandleActivityId(null)
+              setManualHandleAction('')
+              setManualHandleResult('')
+              alert('Activity handled successfully.')
+            },
+            onError: (err: any) => {
+              alert(`Failed to complete activity: ${err.message}`)
+            }
+          })
+        },
+        onError: (err: any) => {
+          alert(`Failed to append aciton: ${err.message}`)
+        }
+      }
+    )
   }
 
   if (isLoading) {
@@ -1224,6 +1306,58 @@ export default function TaskDetailPage({
           </div>
         )
       }
+
+
+      {/* Manual Handle Modal */}
+      {isManualHandleModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Manual Activity Completion</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Describe what actions you took to complete this step. This will be logged as the final result.
+            </p>
+            <form onSubmit={handleManualHandleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Append to Action Log</label>
+                <textarea
+                  value={manualHandleAction}
+                  onChange={(e) => setManualHandleAction(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md p-2 h-24 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none text-sm"
+                  placeholder="Describe your actions (e.g. 'Updated config file')..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Final Result</label>
+                <textarea
+                  value={manualHandleResult}
+                  onChange={(e) => setManualHandleResult(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md p-2 h-20 focus:ring-1 focus:ring-green-500 focus:border-green-500 outline-none resize-none text-sm"
+                  placeholder="Summary of outcome (e.g. 'Issue Resolved')..."
+                  required
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsManualHandleModalOpen(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!manualHandleResult.trim()}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
+                >
+                  Complete Activity
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

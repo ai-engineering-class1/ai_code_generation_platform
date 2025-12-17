@@ -131,6 +131,7 @@ export interface WorkflowHistory {
   task?: string
   tieBack?: string
   metadata?: Record<string, any>
+  workflow_metadata?: Record<string, any>
   createdAt: string
 }
 

@@ -4,8 +4,9 @@ The `ActivityLogService` is the centralized way to track agent and system behavi
 
 ## Core Concepts
 
-1.  **Active Activity**: An activity currently in progress (`Status=IN_PROGRESS`). Functional fields (Action, Situation) are mutable.
-2.  **Activity Log**: A completed activity (`Status=COMPLETED/FAILED`). It is **Frozen** and immutable, with the exception of the `Tie-back` field.
+1.  **Active Activity**: An activity currently in progress (`activity_end_at` is `None`). Typically has `Status=IN_PROGRESS` or `PENDING_USER_INPUT`. Functional fields (Action, Situation) are mutable.
+2.  **Activity Log**: A completed activity (`activity_end_at` is set). Typically has `Status=COMPLETED` or `FAILED`. It is **Frozen** and immutable, with the exception of the `Tie-back` field and `workflow_metadata`.
+3.  **Workflow Metadata**: Semi-structured data (JSON) used for orchestration (e.g., `parent_activity_id`, `branch_name`). It remains **Mutable** across all statuses to allow for updates like "Specification Readiness" or "PR Status" even after the activity step is technically closed.
 
 ## Usage Lifecycle
 
@@ -99,12 +100,60 @@ Move the polling logic to a background worker (e.g., Celery/Redis Queue). The wo
 
 | Stage | Method | Status | Mutable Fields | Logic |
 | :--- | :--- | :--- | :--- | :--- |
-| **Start** | `start_activity` | `IN_PROGRESS` | **S, T** | Define context & goal. |
-| **Exec** | `update_activity` | `IN_PROGRESS` | **A, S** | Log actions & refinements. |
+| **Start** | `start_activity` | `IN_PROGRESS` | **S, T, Meta** | Define context & goal. |
+| **Exec** | `update_activity` | `IN_PROGRESS` | **A, S, Meta** | Log actions & refinements. |
 | **Exec** | `append_activity_action` | `IN_PROGRESS` | **A (Append)** | Stream log actions. |
-| **End** | `end_activity` | `COMPLETED` | **R, T, Status** | Seal with a result. |
-| **Archive**| `update_tie_back`| `COMPLETED` | **T** only | Add hindsight insights. |
+| **End** | `end_activity` | `COMPLETED` | **R, T, Status, Meta** | Seal with a result. |
+| **Archive**| `update_tie_back`| `COMPLETED` | **T, Meta** | Add hindsight insights. |
 
 ## Error Handling
 
 *   **ValueError**: Raised if you try to `update_activity` or `end_activity` on a record that is already frozen (completed).
+
+## Workflow Metadata Usage Examples
+
+The `workflow_metadata` field is a versatile JSON objects designed to support orchestration, orchestration state, and HITL (Human-In-The-Loop) contexts. Here are some common usage patterns:
+
+### 1. Human-In-The-Loop (HITL) Context
+Stores state for manual interventions, approval flows, and recommended user actions.
+
+```json
+{
+  "severity": "medium",
+  "requires_approval": true,
+  "source_activity": "34234-abc-567",
+  "branch_name": "hotfix/remove-duplication",
+  "specification_readiness": false,
+  "suggested_actions": [
+    "Review auth logic",
+    "Check potential deadlock"
+  ]
+}
+```
+
+### 2. Orchestration & Control Flow
+Tracks linkage between distributed components or long-running processes.
+
+```json
+{
+  "parent_process_id": "orchestrator-001",
+  "retry_count": 2,
+  "next_step": "deploy_staging",
+  "timeout_threshold_sec": 300
+}
+```
+
+### 3. Debugging & Traceability
+Snapshots of system state relevant to the specific activity iteration.
+
+```json
+{
+  "git_pull_request_id": "#15",
+  "git_commit_sha": "a1b2c3d4",
+  "environment": "staging",
+  "feature_flags": {
+    "new_ui": true,
+    "beta_api": false
+  }
+}
+```
