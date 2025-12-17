@@ -11,6 +11,7 @@ router = APIRouter()
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, cols: int = Query(80), rows: int = Query(24)):
     await websocket.accept()
+
     session = RestrictedShell(websocket, rows=rows, cols=cols)
     await session.run()
 
@@ -123,6 +124,7 @@ class RestrictedShell:
     async def handle_resize(self):
         # Universal resize handler
         rows, cols = self.dims
+
         
         # Windows PTY
         if self.proc_obj and self.use_pty and os.name == 'nt':
@@ -415,3 +417,5 @@ class RestrictedShell:
             except Exception as e:
                 print(f"DEBUG: Error terminating process: {e}")
             self.proc_obj = None
+
+
