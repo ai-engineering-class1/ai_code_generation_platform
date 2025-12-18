@@ -372,8 +372,8 @@ class RestrictedShell:
         self.proc_obj = None
         
         if self.safe_mode:
-            # Auto-clear screen to remove artifacts from interactive tools (like claude)
-            asyncio.run_coroutine_threadsafe(self.send_output("\x1b[2J\x1b[H"), self.loop)
+            # Auto-clear screen removed to preserve command output
+            # asyncio.run_coroutine_threadsafe(self.send_output("\x1b[2J\x1b[H"), self.loop)
             
             # Signal prompt return
             asyncio.run_coroutine_threadsafe(self.send_prompt(), self.loop)
