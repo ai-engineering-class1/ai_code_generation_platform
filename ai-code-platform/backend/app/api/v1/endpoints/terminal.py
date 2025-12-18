@@ -52,7 +52,7 @@ class RestrictedShell:
         # Try to find claude in path
         return shutil.which("claude") or "claude"
 
-    async def spawn_full_shell(self):
+    async def spawn_full_shell(self, working_dir):
         if os.name == 'nt':
             shell_cmd = "powershell.exe"
             shell_path = shutil.which(shell_cmd)
@@ -67,7 +67,7 @@ class RestrictedShell:
         if "powershell" in shell_path.lower():
             args.extend(["-NoLogo", "-NoProfile"])
             
-        await self.spawn_process(args)
+        await self.spawn_process(args, working_dir=simplestrepodir)
 
     async def run(self):
         try:
@@ -81,7 +81,7 @@ class RestrictedShell:
             if self.safe_mode:
                 # Initial banner
                 await self.send_output(f"\r\n\x1b[36m--- AI Platform Restricted Terminal ---\x1b[0m\r\n")
-                await self.send_output(f"Allowed commands: \x1b[33mclaude\x1b[0m, clear, exit, help\r\n")
+                await self.send_output(f"Allowed commands: \x1b[33mclaude, openspec\x1b[0m, clear, exit, help\r\n")
                 if not self.claude_path:
                      await self.send_output(f"\x1b[31mWarning: 'claude' executable not found in PATH.\x1b[0m\r\n")
                 
@@ -91,7 +91,7 @@ class RestrictedShell:
                 # Clear screen to sync PTY (0,0) with Frontend (0,0)
                 await self.send_output("\x1b[2J\x1b[H")
                 # Removed text message to prevent PTY/Frontend coordinate mismatch
-                await self.spawn_full_shell()
+                await self.spawn_full_shell(simplestrepodir)
 
             while True:
                 raw_data = await self.websocket.receive_text()
@@ -214,7 +214,7 @@ class RestrictedShell:
         base_cmd = parts[0].lower()
         
         # Allowed commands
-        if base_cmd == 'claude':
+        if base_cmd in ['claude', 'openspec']:
             await self.spawn_process(parts)
         elif base_cmd in ['cls', 'clear']:
             await self.send_output("\x1b[2J\x1b[H") # Clear screen ANSI
@@ -222,7 +222,7 @@ class RestrictedShell:
         elif base_cmd == 'exit':
             await self.websocket.close()
         elif base_cmd == 'help':
-            await self.send_output("Available commands:\r\n  claude [args]  - Run Claude CLI\r\n  clear, cls     - Clear screen\r\n  exit           - Close terminal\r\n  help           - Show this help\r\n")
+            await self.send_output("Available commands:\r\n  claude [args]  - Run Claude CLI\r\n  openspec [args] - Run OpenSpec CLI\r\n  clear, cls     - Clear screen\r\n  exit           - Close terminal\r\n  help           - Show this help\r\n")
             await self.send_prompt()
         else:
             await self.send_output(f"\x1b[31mError: Command '{base_cmd}' is not allowed.\x1b[0m\r\n")
@@ -240,7 +240,7 @@ class RestrictedShell:
                 
                 self.proc_obj = self.PtyProcess.spawn(
                     args,
-                    cwd=self.cwd,
+                    cwd=simplestrepodir,
                     dimensions=self.dims,
                     env=env
                 )
