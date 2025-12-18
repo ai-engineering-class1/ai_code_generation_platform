@@ -358,7 +358,7 @@ export default function TaskDetailPage({
                 )}
 
                 {/* Active Activity Actions */}
-                {isActiveSection && (
+                {isActiveSection && activity.status === 'pending_user_input' && (
                   <div className="mt-4 pt-3 border-t border-blue-100 flex gap-3">
                     <button
                       onClick={(e) => {
