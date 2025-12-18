@@ -4,25 +4,111 @@ import os
 import sys
 import shutil
 import json
+import httpx
 from app.core.config import settings
 
 router = APIRouter()
 
+async def download_repo(owner: str, repo: str, branch: str, target_dir: str) -> str:
+    """Download and extract a GitHub repository using the GitHub service.
+    
+    Args:
+        owner: Repository owner
+        repo: Repository name
+        branch: Branch/ref to download
+        target_dir: Target directory to extract to
+        
+    Returns:
+        Path to the extracted repository folder
+    """
+    github_service_url = "http://103.98.213.149:8510"
+    
+    print(f"Downloading repo '{owner}/{repo}' (ref: {branch}) to '{target_dir}'...")
+    
+    try:
+        # Call GitHub service download-repo endpoint
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.get(
+                f"{github_service_url}/download-repo",
+                params={"owner": owner, "repo": repo, "ref": branch},
+                headers={"Accept": "application/zip"}
+            )
+            
+            if response.status_code != 200:
+                raise Exception(f"Failed to download repo: {response.status_code} {response.text}")
+            
+            # Create target directory
+            os.makedirs(target_dir, exist_ok=True)
+            
+            # Save zip file
+            zip_path = os.path.join(target_dir, "repo.zip")
+            with open(zip_path, "wb") as f:
+                f.write(response.content)
+            
+            print(f"Repo downloaded to {zip_path}. Unzipping...")
+            
+            # Extract zip file
+            if os.name == 'nt':  # Windows
+                try:
+                    # Try tar first (available in modern Windows)
+                    import subprocess
+                    subprocess.run(
+                        ["tar", "-xf", zip_path, "-C", target_dir],
+                        check=True,
+                        capture_output=True
+                    )
+                except Exception as e:
+                    print(f"tar failed, trying PowerShell Expand-Archive... {e}")
+                    # Fallback to PowerShell
+                    subprocess.run(
+                        ["powershell", "-command", f"Expand-Archive -Path '{zip_path}' -DestinationPath '{target_dir}' -Force"],
+                        check=True,
+                        capture_output=True
+                    )
+            else:  # Linux/Mac
+                import subprocess
+                subprocess.run(
+                    ["unzip", "-o", zip_path, "-d", target_dir],
+                    check=True,
+                    capture_output=True
+                )
+            
+            print("Unzip complete.")
+            
+            # GitHub zips extract to a subfolder like 'owner-repo-sha/'
+            # Find this subfolder and return its path
+            entries = os.listdir(target_dir)
+            for entry in entries:
+                entry_path = os.path.join(target_dir, entry)
+                if os.path.isdir(entry_path) and entry not in ['.', '..']:
+                    print(f"Found extracted folder: {entry_path}")
+                    return entry_path
+            
+            # If no subfolder found, return the target directory
+            return target_dir
+            
+    except Exception as e:
+        print(f"Error downloading repo: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
+
 @router.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket, cols: int = Query(80), rows: int = Query(24)):
+async def websocket_endpoint(websocket: WebSocket, cols: int = Query(80), rows: int = Query(24), taskId: str = Query(None)):
     await websocket.accept()
 
-    session = RestrictedShell(websocket, rows=rows, cols=cols)
+    session = RestrictedShell(websocket, rows=rows, cols=cols, task_id=taskId)
     await session.run()
 
 class RestrictedShell:
-    def __init__(self, websocket: WebSocket, rows: int = 24, cols: int = 80):
+    def __init__(self, websocket: WebSocket, rows: int = 24, cols: int = 80, task_id: str = None):
         self.websocket = websocket
         self.safe_mode = settings.TERMINAL_SAFE_MODE
         self.loop = asyncio.get_running_loop()
         self.proc_obj = None
         self.buffer = ""
         self.dims = (rows, cols)
+        self.task_id = task_id
         
         # PTY State for Linux
         self.master_fd = None
@@ -77,6 +163,44 @@ class RestrictedShell:
                 "title": self.shell_title,
                 "safe_mode": self.safe_mode
             })
+
+            # Download repository if taskId is provided (OpenSpec Editor context)
+            if self.task_id:
+                try:
+                    await self.send_output(f"\r\n\x1b[36m--- Downloading repository for code context ---\x1b[0m\r\n")
+                    
+                    # Define paths
+                    # Target: backend/temp/{taskId}/codebase/simplest-repo
+                    base_dir = os.getcwd()
+                    if os.path.basename(base_dir) == 'backend':
+                        base_dir = os.path.dirname(base_dir)
+                    
+                    codebase_dir = os.path.join(base_dir, "backend", "temp", self.task_id, "codebase")
+                    repo_target_dir = os.path.join(codebase_dir, "simplest-repo")
+                    
+                    # Download from https://github.com/DrLinAITeam2/simplest-repo/
+                    owner = "DrLinAITeam2"
+                    repo = "simplest-repo"
+                    branch = "main"
+                    
+                    await self.send_output(f"Downloading {owner}/{repo} (branch: {branch})...\r\n")
+                    
+                    # Download and extract
+                    extracted_path = await download_repo(owner, repo, branch, repo_target_dir)
+                    
+                    await self.send_output(f"\x1b[32m✓ Repository downloaded successfully\x1b[0m\r\n")
+                    
+                    # Update working directory to the simplest-repo folder
+                    # This folder contains:
+                    #   - DrLinAITeam2-simplest-repo-{hash}/ (the extracted repo with openspec/)
+                    # Both repo code and OpenSpec files are accessible from this location
+                    self.cwd = repo_target_dir
+                    
+                    await self.send_output(f"Working directory: {self.cwd}\r\n")
+                    
+                except Exception as e:
+                    await self.send_output(f"\x1b[31mWarning: Failed to download repository: {e}\x1b[0m\r\n")
+                    # Continue anyway - terminal will still work
 
             if self.safe_mode:
                 # Initial banner

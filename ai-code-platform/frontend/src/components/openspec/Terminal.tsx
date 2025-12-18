@@ -12,9 +12,10 @@ interface TerminalProps {
     onClose: () => void;
     mode?: 'fixed' | 'embedded' | 'popup';
     onStatusChange?: (isConnected: boolean) => void;
+    taskId?: string | null;
 }
 
-export default function Terminal({ isOpen, onClose, mode = 'fixed', onStatusChange }: TerminalProps) {
+export default function Terminal({ isOpen, onClose, mode = 'fixed', onStatusChange, taskId }: TerminalProps) {
     const terminalRef = useRef<HTMLDivElement>(null);
     const xtermRef = useRef<XTerm | null>(null);
     const fitAddonRef = useRef<FitAddon | null>(null);
@@ -83,7 +84,10 @@ export default function Terminal({ isOpen, onClose, mode = 'fixed', onStatusChan
             let apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
             apiBase = apiBase.replace(/\/$/, '');
 
-            const wsUrl = apiBase.replace(/^http/, 'ws') + `/api/v1/terminal/ws?cols=${term.cols}&rows=${term.rows}`;
+            let wsUrl = apiBase.replace(/^http/, 'ws') + `/api/v1/terminal/ws?cols=${term.cols}&rows=${term.rows}`;
+            if (taskId) {
+                wsUrl += `&taskId=${taskId}`;
+            }
 
 
             term.write(`\x1b[90mConnecting...\x1b[0m\r\n`);

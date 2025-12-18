@@ -23,9 +23,91 @@ user_sessions: Dict[str, Dict[str, Any]] = {}
 task_manager: Dict[str, Dict[str, Any]] = {}
 
 # Services
-# Workspace root should be under backend/temp/<taskId>/codebase/simplestrepo/...
+# Workspace root should be under backend/temp/<taskId>/codebase/simplest-repo/...
 openspec_service = OpenSpecService("./temp")
 claude_service = ClaudeService()
+
+# Helper function to ensure repository is downloaded
+async def ensure_repo_downloaded(task_id: str) -> bool:
+    """
+    Ensure the repository is downloaded before uploading OpenSpec files.
+    This prevents duplicate folder creation.
+    
+    Returns True if repo was downloaded or already exists, False on error.
+    """
+    import os
+    from pathlib import Path
+    
+    base_dir = Path("./temp")
+    simplest_repo_dir = base_dir / task_id / "codebase" / "simplest-repo"
+    
+    # Check if repository is already downloaded
+    if simplest_repo_dir.exists():
+        for item in simplest_repo_dir.iterdir():
+            if item.is_dir() and item.name.startswith("DrLinAITeam2-simplest-repo-"):
+                print(f"Repository already downloaded: {item.name}")
+                return True
+    
+    # Download the repository
+    try:
+        print(f"Downloading repository for task {task_id}...")
+        
+        github_service_url = "http://103.98.213.149:8510"
+        owner = "DrLinAITeam2"
+        repo = "simplest-repo"
+        branch = "main"
+        
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.get(
+                f"{github_service_url}/download-repo",
+                params={"owner": owner, "repo": repo, "ref": branch},
+                headers={"Accept": "application/zip"}
+            )
+            
+            if response.status_code != 200:
+                print(f"Failed to download repo: {response.status_code}")
+                return False
+            
+            # Create target directory
+            simplest_repo_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Save and extract zip
+            zip_path = simplest_repo_dir / "repo.zip"
+            zip_path.write_bytes(response.content)
+            
+            # Extract
+            import subprocess
+            if os.name == 'nt':  # Windows
+                try:
+                    subprocess.run(
+                        ["tar", "-xf", str(zip_path), "-C", str(simplest_repo_dir)],
+                        check=True,
+                        capture_output=True
+                    )
+                except:
+                    subprocess.run(
+                        ["powershell", "-command", f"Expand-Archive -Path '{zip_path}' -DestinationPath '{simplest_repo_dir}' -Force"],
+                        check=True,
+                        capture_output=True
+                    )
+            else:  # Linux/Mac
+                subprocess.run(
+                    ["unzip", "-o", str(zip_path), "-d", str(simplest_repo_dir)],
+                    check=True,
+                    capture_output=True
+                )
+            
+            # Clean up zip file
+            zip_path.unlink()
+            
+            print(f"Repository downloaded successfully")
+            return True
+            
+    except Exception as e:
+        print(f"Error downloading repository: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
 
 # Helper for GitHub Logic using GitHub Service Proxy
 # Based on: https://github.com/lee-liao/claude-code-process/blob/main/src/github-service.ts
@@ -147,10 +229,12 @@ async def upload_openspec(project_id: str, taskId: str = None, openspecFile: Upl
     if not validation.get("isValid"):
         raise HTTPException(status_code=400, detail=f"Invalid OpenSpec structure. {validation}")
     
+    # Ensure repository is downloaded first to prevent duplicate folders
+    if taskId:
+        await ensure_repo_downloaded(taskId)
+    
     # Do NOT store the uploaded zip under temp_openspec/<id>.
-    # We only extract markdown files into:
-    #   backend/temp/<taskId>/codebase/simplestrepo/openspec/changes/...
-    # (Optionally, we could store zips under openspec/uploads, but not required for editing.)
+    # We only extract markdown files into the downloaded repository's openspec folder
     file_path = ""
     
     # Extract content and write to workspace (unzip ALL files, not only .md)

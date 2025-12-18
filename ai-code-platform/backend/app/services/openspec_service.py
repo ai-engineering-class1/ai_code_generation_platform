@@ -24,7 +24,8 @@ class OpenSpecService:
             use_system_temp: If True, use system temp dir; otherwise use self.temp_dir
         
         Returns:
-            Path to workspace root (e.g., backend/temp/{task_id}/codebase/simplestrepo)
+            Path to workspace root - the extracted repository folder if it exists,
+            otherwise backend/temp/{task_id}/codebase/simplest-repo
         """
         # For this project, the workspace must live under the backend's temp folder,
         # not the OS/system temp. `self.temp_dir` is configured by the endpoint module
@@ -32,12 +33,23 @@ class OpenSpecService:
         base = self.temp_dir
         
         if task_id:
-            workspace = base / task_id / "codebase" / "simplestrepo"
+            simplest_repo_dir = base / task_id / "codebase" / "simplest-repo"
         else:
-            workspace = base / "default" / "codebase" / "simplestrepo"
+            simplest_repo_dir = base / "default" / "codebase" / "simplest-repo"
         
-        workspace.mkdir(parents=True, exist_ok=True)
-        return workspace
+        # Ensure the simplest-repo directory exists
+        simplest_repo_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Look for the extracted repository folder (DrLinAITeam2-simplest-repo-*)
+        # If found, use it as the workspace root so OpenSpec files go into the repo's openspec/ folder
+        if simplest_repo_dir.exists():
+            for item in simplest_repo_dir.iterdir():
+                if item.is_dir() and item.name.startswith("DrLinAITeam2-simplest-repo-"):
+                    return item
+        
+        # If no extracted folder found, return the simplest-repo directory
+        # (This will be used before the repo is downloaded)
+        return simplest_repo_dir
 
     def get_openspec_uploads_dir(self, task_id: str = None, use_system_temp: bool = True) -> Path:
         """Get the openspec/uploads directory within the workspace (for storing uploaded zips)."""
@@ -316,8 +328,8 @@ class OpenSpecService:
         """
         Extract OpenSpec content from zip file and build tree structure.
 
-        When write_to_disk is True, unzip ALL files into:
-          backend/temp/<taskId>/codebase/simplestrepo/openspec/changes/<change_set>/...
+        When write_to_disk is True, unzip ALL files into the downloaded repository's openspec folder:
+          backend/temp/<taskId>/codebase/simplest-repo/DrLinAITeam2-simplest-repo-*/openspec/changes/<change_set>/...
 
         The tree returned is still focused on Markdown (.md) files for editing.
         """
@@ -418,8 +430,8 @@ class OpenSpecService:
         """
         Legacy helper (no longer used by OpenSpec Editor upload flow).
 
-        The editor now extracts markdown files directly into:
-          backend/temp/<taskId>/codebase/simplestrepo/openspec/changes/...
+        The editor now extracts markdown files directly into the downloaded repository's openspec folder:
+          backend/temp/<taskId>/codebase/simplest-repo/DrLinAITeam2-simplest-repo-*/openspec/changes/...
 
         Keeping this method for backwards compatibility for any other callers.
         """

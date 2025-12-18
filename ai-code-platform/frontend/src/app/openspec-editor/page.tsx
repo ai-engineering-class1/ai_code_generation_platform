@@ -501,6 +501,7 @@ function EditorContent() {
                 isOpen={showTerminal}
                 onClose={handleCloseTerminal}
                 onStatusChange={setIsTerminalConnected}
+                taskId={taskId}
             />
 
             {loadingMessage && <LoadingOverlay message={loadingMessage} />}
