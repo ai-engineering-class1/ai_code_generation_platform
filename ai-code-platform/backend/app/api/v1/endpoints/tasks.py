@@ -12,6 +12,7 @@ from app.schemas.task import (
     TaskDetailResponse, SpecificationCreate, SpecificationResponse
 )
 from app.services.claude_service import ClaudeService
+from app.services.activity_log_service import ActivityLogService
 from app.services.notification_service import notify_task_assigned
 
 router = APIRouter()
@@ -108,7 +109,7 @@ async def get_task(
         )
     
     from app.models.workflow import Specification, CodeGeneration
-    from app.models.notification import TaskWorkflowHistory
+    from app.models.task import TaskWorkflowHistory
     
     print(f"Fetching task: task_id={task_id}, project_id={project_id}")
     task = db.query(Task).filter(
@@ -337,15 +338,82 @@ async def approve_specification(
     return spec
 
 
-@router.post("/assign-to-agent")
+@router.post("/{project_id}/tasks/{task_id}/assign")
 async def assign_to_agent(
+    project_id: str,
+    task_id: str,
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Assign task to remote Claude Web API agent - quick demo"""
+    """
+    Assign task to remote Claude Web API agent.
+    
+    STAR Lifecycle:
+    1. Start Activity (S, T): "Remote Agent Execution", Context = Repo URL.
+    2. Execute: Call Remote Agent API.
+    3. Update Activity (A): "Dispatched to Remote Agent (ID: ...)"
+    """
     try:
+        # 1. Fetch Project for Repo URL
+        project = db.query(Project).filter(
+            Project.id == project_id,
+            Project.owner_id == current_user.id
+        ).first()
+
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+            
+        repo_url = project.github_repo_url
+        if repo_url and repo_url.endswith(".git"):
+            repo_url = repo_url[:-4]
+            
+        if not repo_url:
+             raise HTTPException(status_code=400, detail="Project repository URL (GitHub) is missing.")
+
+        # 2. Init Service
+        activity_service = ActivityLogService()
         claude_service = ClaudeService()
-        result = await claude_service.assign_to_agent()
-        return result
+
+        # 3. STAR: Start Activity (Situation, Task)
+        activity = activity_service.start_activity(
+            db=db,
+            task_id=task_id,
+            title="Remote Agent Execution",
+            operator_id="agent-claude-remote",
+            activity_type="agent_execution",
+            situation=f"User initiated remote agent task for repository {repo_url}.",
+            task_role="Implement requested feature and generate code (Remote Agent)."
+        )
+
+        # 4. Execute Remote Call
+        try:
+            result = await claude_service.assign_to_agent(repo_url=repo_url)
+            remote_task_id = result.get("taskId")
+            
+            # 5. STAR: Update Activity (Action) with success
+            # CRITICAL: Capture the returned/refreshed activity object!
+            activity = activity_service.update_activity(
+                db=db,
+                activity_id=activity.id,
+                action=f"Successfully dispatched task to remote agent.\nRemote Task ID: {remote_task_id}.\nPrompt: Please implement the OpenSpec change under openspec/changes\nWaiting for results via polling...",
+                metadata={"remote_task_id": remote_task_id, "remote_status": "dispatched"}
+            )
+            
+            # Return activity so frontend can start polling 'remote_task_id'
+            return activity
+            
+        except Exception as e:
+            # Handle Dispatch Failure
+            activity_service.end_activity(
+                db=db,
+                activity_id=activity.id,
+                result=f"Failed to dispatch to remote agent. Error: {str(e)}",
+                status="failed"
+            )
+            raise HTTPException(status_code=500, detail=str(e))
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

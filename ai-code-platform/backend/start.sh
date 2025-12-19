@@ -1,9 +1,9 @@
 #!/bin/bash
-# Start backend server on port 8082
+# Start backend server on port 8000
 
 cd "$(dirname "$0")"
 
-echo "Starting AI Code Generation Platform Backend on port 8082..."
+echo "Starting AI Code Generation Platform Backend on port 8000..."
 
 # Activate virtual environment
 if [ -d "venv" ]; then
@@ -19,4 +19,4 @@ python update_db_schema.py
 echo ""
 
 # Start server
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8082
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000

@@ -18,10 +18,10 @@ export default function ProjectSettingsPage({ params }: { params: { projectId: s
   const getJiraUrls = (jiraUrl: string, projectKey: string) => {
     // Clean up the URL - extract just the base domain
     let baseUrl = jiraUrl.trim()
-    
+
     // Remove trailing slash
     baseUrl = baseUrl.replace(/\/$/, '')
-    
+
     // Extract just the domain (remove any existing paths like /wiki/home, /jira, etc.)
     try {
       const urlObj = new URL(baseUrl)
@@ -34,7 +34,7 @@ export default function ProjectSettingsPage({ params }: { params: { projectId: s
         baseUrl = match[0]
       }
     }
-    
+
     // For Jira Cloud (atlassian.net) - use classic format which is most reliable
     if (baseUrl.includes('atlassian.net')) {
       return {
@@ -50,7 +50,7 @@ export default function ProjectSettingsPage({ params }: { params: { projectId: s
         projectBrowse: `${baseUrl}/browse/${projectKey}`
       }
     }
-    
+
     // For Jira Server/Data Center
     return {
       // Classic create issue URL
@@ -74,6 +74,7 @@ export default function ProjectSettingsPage({ params }: { params: { projectId: s
     syncEnabled: true,
   })
   const [githubData, setGithubData] = useState({
+    repoUrl: '',
     repoOwner: '',
     repoName: '',
     accessToken: '',
@@ -151,14 +152,22 @@ export default function ProjectSettingsPage({ params }: { params: { projectId: s
   useEffect(() => {
     if (githubConfig) {
       setGithubData({
+        repoUrl: `https://github.com/${githubConfig.repoOwner}/${githubConfig.repoName}`,
         repoOwner: githubConfig.repoOwner,
         repoName: githubConfig.repoName,
         accessToken: '', // Don't show existing token
         branchPrefix: githubConfig.branchPrefix,
         autoMerge: githubConfig.autoMerge,
       })
+    } else if (project?.github_repo_url) {
+      setGithubData(prev => ({
+        ...prev,
+        repoUrl: project.github_repo_url || '',
+        repoOwner: '', // Will be parsed on submit
+        repoName: ''
+      }))
     }
-  }, [githubConfig])
+  }, [githubConfig, project])
 
   // Update project mutation
   const updateProjectMutation = useMutation({
@@ -245,20 +254,20 @@ export default function ProjectSettingsPage({ params }: { params: { projectId: s
 
   const handleJiraSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     // Validate required fields
     if (!jiraData.jiraUrl || !jiraData.jiraProjectKey || !jiraData.jiraEmail) {
       alert('Please fill in all required fields: Jira URL, Project Key, and Email')
       return
     }
-    
+
     // If updating existing config, accessToken is optional
     // If creating new config, accessToken is required
     if (!jiraConfig && !jiraData.accessToken) {
       alert('Please provide a Jira API Token')
       return
     }
-    
+
     // Build payload - only include accessToken if it's provided
     const payload: any = {
       jiraUrl: jiraData.jiraUrl,
@@ -266,32 +275,52 @@ export default function ProjectSettingsPage({ params }: { params: { projectId: s
       jiraEmail: jiraData.jiraEmail,
       syncEnabled: jiraData.syncEnabled,
     }
-    
+
     // Only include accessToken if it's provided
     if (jiraData.accessToken) {
       payload.accessToken = jiraData.accessToken
     }
-    
+
     console.log('Submitting Jira config:', payload) // Debug log
     configureJiraMutation.mutate(payload)
   }
 
   const handleGitHubSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    
+
+    // Parse URL on submit
+    let owner = githubData.repoOwner;
+    let repo = githubData.repoName;
+
+    if (githubData.repoUrl) {
+      try {
+        const cleanUrl = githubData.repoUrl.replace(/\.git$/, '').replace(/\/$/, '');
+        const parts = cleanUrl.split('/');
+        if (parts.length >= 2) {
+          repo = parts.pop() || '';
+          owner = parts.pop() || '';
+        }
+      } catch (e) { }
+    }
+
+    if (!owner || !repo) {
+      alert("Could not parse Repository Owner and Name from URL");
+      return;
+    }
+
     // Build payload - only include accessToken if it's provided
     const payload: any = {
-      repoOwner: githubData.repoOwner,
-      repoName: githubData.repoName,
+      repoOwner: owner,
+      repoName: repo,
       branchPrefix: githubData.branchPrefix,
       autoMerge: githubData.autoMerge,
     }
-    
+
     // Only include accessToken if it's provided
     if (githubData.accessToken) {
       payload.accessToken = githubData.accessToken
     }
-    
+
     configureGitHubMutation.mutate(payload)
   }
 
@@ -321,31 +350,28 @@ export default function ProjectSettingsPage({ params }: { params: { projectId: s
             <nav className="flex space-x-8 px-6" aria-label="Tabs">
               <button
                 onClick={() => setActiveTab('general')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'general'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'general'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
               >
                 General
               </button>
               <button
                 onClick={() => setActiveTab('jira')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'jira'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'jira'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
               >
                 Jira Integration
               </button>
               <button
                 onClick={() => setActiveTab('github')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'github'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'github'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
               >
                 GitHub Integration
               </button>
@@ -670,81 +696,28 @@ export default function ProjectSettingsPage({ params }: { params: { projectId: s
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label htmlFor="repoOwner" className="block text-sm font-medium text-gray-700 mb-2">
-                      Repository Owner *
-                    </label>
-                    <input
-                      type="text"
-                      id="repoOwner"
-                      required
-                      value={githubData.repoOwner}
-                      onChange={(e) => setGithubData({ ...githubData, repoOwner: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="username or organization"
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="repoName" className="block text-sm font-medium text-gray-700 mb-2">
-                      Repository Name *
-                    </label>
-                    <input
-                      type="text"
-                      id="repoName"
-                      required
-                      value={githubData.repoName}
-                      onChange={(e) => setGithubData({ ...githubData, repoName: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="repository-name"
-                    />
-                  </div>
-                </div>
-
                 <div>
-                  <label htmlFor="githubAccessToken" className="block text-sm font-medium text-gray-700 mb-2">
-                    GitHub Personal Access Token {githubConfig && '(Leave empty to keep existing)'}
-                  </label>
-                  <input
-                    type="password"
-                    id="githubAccessToken"
-                    value={githubData.accessToken}
-                    onChange={(e) => setGithubData({ ...githubData, accessToken: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Your GitHub personal access token"
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="branchPrefix" className="block text-sm font-medium text-gray-700 mb-2">
-                    Branch Prefix
+                  <label htmlFor="githubRepoUrl" className="block text-sm font-medium text-gray-700 mb-2">
+                    GitHub Repository URL (Optional)
                   </label>
                   <input
                     type="text"
-                    id="branchPrefix"
-                    value={githubData.branchPrefix}
-                    onChange={(e) => setGithubData({ ...githubData, branchPrefix: e.target.value })}
+                    id="githubRepoUrl"
+                    value={githubData.repoUrl}
+                    onChange={(e) => setGithubData({ ...githubData, repoUrl: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="ai-generated"
+                    placeholder="https://github.com/username/repository"
                   />
                   <p className="mt-1 text-sm text-gray-500">
-                    Branches will be created as {githubData.branchPrefix}/task-id
+                    You can configure GitHub integration later in project settings
                   </p>
                 </div>
 
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id="autoMerge"
-                    checked={githubData.autoMerge}
-                    onChange={(e) => setGithubData({ ...githubData, autoMerge: e.target.checked })}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                  <label htmlFor="autoMerge" className="ml-2 block text-sm text-gray-900">
-                    Automatically merge PRs after approval
-                  </label>
-                </div>
+
+
+
+
+
 
                 <div className="flex justify-end pt-4">
                   <button

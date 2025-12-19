@@ -52,21 +52,21 @@ if not exist ".env.local" (
     (
         echo # Frontend Environment Configuration
         echo.
-        echo # Backend API URL - Updated to port 8082
-        echo NEXT_PUBLIC_API_URL=http://localhost:8082
+        echo # Backend API URL - Updated to port 8000
+        echo NEXT_PUBLIC_API_URL=http://localhost:8000
         echo.
         echo # App Configuration
         echo NEXT_PUBLIC_APP_NAME="AI Code Generation Platform"
         echo NEXT_PUBLIC_APP_VERSION="0.1.0"
     ) > .env.local
-    echo ✓ .env.local file created with API URL: http://localhost:8082
+    echo ✓ .env.local file created with API URL: http://localhost:8000
 ) else (
     echo ✓ .env.local file already exists
     REM Check if API URL needs updating
-    findstr /c:"NEXT_PUBLIC_API_URL=http://localhost:8000" .env.local >nul 2>&1
+    findstr /c:"NEXT_PUBLIC_API_URL=http://localhost:8082" .env.local >nul 2>&1
     if not errorlevel 1 (
-        powershell -Command "(Get-Content .env.local) -replace 'NEXT_PUBLIC_API_URL=http://localhost:8000', 'NEXT_PUBLIC_API_URL=http://localhost:8082' | Set-Content .env.local"
-        echo ✓ Updated API URL to port 8082
+        powershell -Command "(Get-Content .env.local) -replace 'NEXT_PUBLIC_API_URL=http://localhost:8082', 'NEXT_PUBLIC_API_URL=http://localhost:8000' | Set-Content .env.local"
+        echo ✓ Updated API URL to port 8000
     )
 )
 echo.
@@ -76,7 +76,7 @@ echo ✓ Frontend setup complete!
 echo ==================================================
 echo.
 echo Next steps:
-echo 1. Make sure the backend is running on http://localhost:8082
+echo 1. Make sure the backend is running on http://localhost:8000
 echo.
 echo 2. Start the development server:
 echo    npm run dev

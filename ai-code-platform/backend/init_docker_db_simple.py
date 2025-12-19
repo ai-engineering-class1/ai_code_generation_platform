@@ -161,7 +161,7 @@ def create_data():
         print("\n1. Start Backend:")
         print("   cd backend")
         print("   source venv/bin/activate")
-        print("   uvicorn app.main:app --reload --host 0.0.0.0 --port 8082")
+        print("   uvicorn app.main:app --reload --host 0.0.0.0 --port 8000")
         print("\n2. Start Frontend:")
         print("   cd frontend")
         print("   npm run dev")

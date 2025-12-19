@@ -1,3 +1,11 @@
+import sys
+import asyncio
+
+# Force ProactorEventLoopPolicy on Windows for subprocess support
+# This must coincide with Uvicorn's import of the app
+if sys.platform == 'win32':
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
@@ -9,7 +17,7 @@ from app.core.database import Base, engine
 from app.models import user, project, task, integration, workflow, notification
 from app.models.user import User  # Explicitly import User for Task relationship
 from app.models.project import Project  # Explicitly import Project for Task relationship
-from app.models.notification import TaskWorkflowHistory  # Explicitly import for relationship resolution
+from app.models.task import TaskWorkflowHistory  # Explicitly import for relationship resolution
 from app.models.workflow import Specification, CodeGeneration  # Explicitly import for relationship resolution
 
 # Create database tables
@@ -24,12 +32,7 @@ app = FastAPI(
 # Configure CORS - Allow frontend origin
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3012",
-        "http://localhost:3000",
-        "http://127.0.0.1:3012",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["*"],

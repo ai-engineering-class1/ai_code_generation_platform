@@ -6,7 +6,7 @@
 ✅ Frontend dependencies installed  
 ✅ Configuration files created  
 ✅ **Frontend configured to run on port 3012**
-✅ **Backend configured to run on port 8082**
+✅ **Backend configured to run on port 8000**
 ⚠️ Need to configure PostgreSQL  
 
 ---
@@ -92,25 +92,25 @@ This will create:
 
 ## 🎮 START THE SERVERS
 
-### 🔧 Terminal 1 - Start Backend (Port 8082)
+### 🔧 Terminal 1 - Start Backend (Port 8000)
 
 ```bash
 cd /Volumes/ExtNVMe/ai_engineering_class1/ai_code_generation_platform/ai-code-platform/backend
 source venv/bin/activate
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8082
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 **You should see:**
 ```
-INFO:     Uvicorn running on http://0.0.0.0:8082 (Press CTRL+C to quit)
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
 INFO:     Started reloader process
 INFO:     Started server process
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 ```
 
-✅ Backend is now running at: **http://localhost:8082**  
-✅ API Docs at: **http://localhost:8082/docs**
+✅ Backend is now running at: **http://localhost:8000**  
+✅ API Docs at: **http://localhost:8000/docs**
 
 ---
 
@@ -185,11 +185,11 @@ psql -d postgres
 # DATABASE_URL=postgresql://YOUR_USERNAME@localhost:5432/ai_code_platform
 ```
 
-### Problem: Port 8082 Already in Use
+### Problem: Port 8000 Already in Use
 
 ```bash
-# Kill process on port 8082
-lsof -ti:8082 | xargs kill -9
+# Kill process on port 8000
+lsof -ti:8000 | xargs kill -9
 
 # Then restart the backend
 ```
@@ -246,16 +246,16 @@ After logging in, you'll see:
 
 **Test Backend Health:**
 ```bash
-curl http://localhost:8082/health
+curl http://localhost:8000/health
 # Should return: {"status":"healthy"}
 ```
 
 **Test API Documentation:**
-Open in browser: http://localhost:8082/docs
+Open in browser: http://localhost:8000/docs
 
 **Create Test User (if needed):**
 ```bash
-curl -X POST http://localhost:8082/api/v1/auth/register \
+curl -X POST http://localhost:8000/api/v1/auth/register \
   -H "Content-Type: application/json" \
   -d '{
     "email": "newuser@example.com",
@@ -272,9 +272,9 @@ curl -X POST http://localhost:8082/api/v1/auth/register \
 | Service | URL |
 |---------|-----|
 | **Frontend** | http://localhost:3012 |
-| **Backend API** | http://localhost:8082 |
-| **API Docs** | http://localhost:8082/docs |
-| **Health Check** | http://localhost:8082/health |
+| **Backend API** | http://localhost:8000 |
+| **API Docs** | http://localhost:8000/docs |
+| **Health Check** | http://localhost:8000/health |
 
 ---
 
@@ -282,7 +282,7 @@ curl -X POST http://localhost:8082/api/v1/auth/register \
 
 **Start Backend:**
 ```bash
-cd backend && source venv/bin/activate && uvicorn app.main:app --reload --host 0.0.0.0 --port 8082
+cd backend && source venv/bin/activate && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 **Start Frontend:**

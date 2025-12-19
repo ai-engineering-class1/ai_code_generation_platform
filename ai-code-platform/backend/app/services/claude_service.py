@@ -1,6 +1,9 @@
 import anthropic
 import httpx
-from typing import Dict, Any
+import json
+import re
+from uuid import uuid4
+from typing import Dict, Any, List
 from app.core.config import settings
 
 
@@ -151,19 +154,26 @@ Provide your review in a structured format.
             print(f"Error reviewing code: {e}")
             return {"review": "", "approved": False}
     
-    async def assign_to_agent(self) -> Dict[str, Any]:
-        """Assign task to remote Claude Web API agent - quick demo"""
-        CLAUDE_WEB_API_URL = "http://103.98.213.149:8520"
+    async def assign_to_agent(self, repo_url: str) -> Dict[str, Any]:
+        """
+        Assign task to remote Claude Web API agent.
+        
+        Args:
+            repo_url: URL of the repository to work on.
+        """
+        CLAUDE_WEB_API_URL = settings.CLAUDE_WEB_API_URL
+        
+        # In future, we might use token: headers={"Authorization": f"Bearer {settings.CLAUDE_WEB_API_TOKEN}"}
         
         payload = {
             "taskType": "feature-implementation",
-            "repoUrl": "https://github.com/DrLinAITeam2/simplest-repo",
+            "repoUrl": repo_url,
             "prompt": "Please implement the OpenSpec change under openspec/changes",
             "maxTurns": 25
         }
         
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=float(settings.REMOTE_AGENT_TIMEOUT_SEC)) as client:
                 response = await client.post(f"{CLAUDE_WEB_API_URL}/tasks", json=payload)
                 response.raise_for_status()
                 return response.json()
@@ -173,15 +183,112 @@ Provide your review in a structured format.
     
     async def get_agent_task(self, task_id: str) -> Dict[str, Any]:
         """Get task status from remote Claude Web API agent"""
-        CLAUDE_WEB_API_URL = "http://103.98.213.149:8520"
+        CLAUDE_WEB_API_URL = settings.CLAUDE_WEB_API_URL
         
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=float(settings.REMOTE_AGENT_TIMEOUT_SEC)) as client:
                 response = await client.get(f"{CLAUDE_WEB_API_URL}/tasks/{task_id}")
                 response.raise_for_status()
                 return response.json()
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                # If remote task not found, it might be a local test ID.
+                # Check if it looks like a standard UUID (len 36)
+                if len(task_id) == 36:
+                     print(f"Agent task {task_id} not found remotely. Returning mock data for local testing.")
+                     return {
+                         "taskId": task_id,
+                         "status": "running",
+                         "result": {
+                             "type": "agent-execution",
+                             "subtype": "in-progress"
+                         },
+                         "executionMetrics": {
+                             "durationMs": 15000,
+                             "numTurns": 5,
+                             "totalCostUsd": 0.05
+                         },
+                         "startedAt": "2025-12-14T12:00:00Z"
+                     }
+            print(f"Error getting agent task: {e}")
+            raise Exception(f"Failed to get agent task: {str(e)}")
         except Exception as e:
             print(f"Error getting agent task: {e}")
             raise Exception(f"Failed to get agent task: {str(e)}")
+
+    async def generate_suggestions(
+        self,
+        spec_content: str,
+        project_name: str = ""
+    ) -> List[Dict[str, str]]:
+        """Generate AI suggestions for a specification"""
+        try:
+            # Check if API key is configured
+            if not settings.ANTHROPIC_API_KEY:
+                # Mock response if no key (or raise error)
+                print("Warning: ANTHROPIC_API_KEY not found, returning mock suggestions")
+                return [
+                    {
+                        "id": str(uuid4()),
+                        "content": "Consider adding more specific acceptance criteria. (Mock Suggestion)"
+                    }
+                ]
+
+            message = self.client.messages.create(
+                model="claude-3-5-sonnet-20241022",
+                max_tokens=2048,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": f"""You are an expert software architect reviewing an OpenSpec specification.
+
+Please analyze this specification and provide 2-3 specific suggestions to improve it. Focus on:
+1. Clarity and completeness
+2. Testability
+3. Edge cases that should be considered
+4. Potential implementation challenges
+
+Specification content:
+{spec_content}
+
+Respond with a JSON array of suggestions, each with "id" and "content" fields."""
+                    }
+                ]
+            )
+            
+            # Parse the response
+            response_text = message.content[0].text
+            
+            # Try to extract JSON from the response
+            json_match = re.search(r'\[[\s\S]*\]', response_text)
+            if json_match:
+                suggestions = json.loads(json_match.group(0))
+                # Ensure each suggestion has an ID
+                for suggestion in suggestions:
+                    if 'id' not in suggestion:
+                        suggestion['id'] = str(uuid4())
+                return suggestions
+            
+            # Fallback: create suggestions from the text
+            return [
+                {
+                    "id": str(uuid4()),
+                    "content": response_text
+                }
+            ]
+            
+        except Exception as e:
+            print(f"Error calling Claude API: {e}")
+            # Return placeholder suggestions if API fails
+            return [
+                {
+                    "id": str(uuid4()),
+                    "content": "Consider adding more specific acceptance criteria for this feature."
+                },
+                {
+                    "id": str(uuid4()),
+                    "content": "Add error handling scenarios to make the specification more robust."
+                }
+            ]
 
 

@@ -1,4 +1,6 @@
-from sqlalchemy import Column, String, Text, ForeignKey, DateTime, Enum
+from sqlalchemy import Column, String, Text, ForeignKey, DateTime, Enum, JSON, Boolean
+from sqlalchemy.dialects.postgresql import TSVECTOR
+from sqlalchemy import Index
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import uuid
@@ -44,6 +46,13 @@ class TaskPriority(str, enum.Enum):
     CRITICAL = "critical"
 
 
+class ActivityStatus(str, enum.Enum):
+    IN_PROGRESS = "in_progress"
+    PENDING_USER_INPUT = "pending_user_input"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 class Task(Base):
     __tablename__ = "tasks"
     
@@ -66,4 +75,53 @@ class Task(Base):
     specifications = relationship("Specification", back_populates="task")  # One-to-many: task can have multiple spec versions
     code_generations = relationship("CodeGeneration", back_populates="task")  # One-to-many: task can have multiple code generations
     workflow_history = relationship("TaskWorkflowHistory", back_populates="task")
+
+
+class TaskWorkflowHistory(Base):
+    __tablename__ = "task_workflow_history"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    task_id = Column(String, ForeignKey("tasks.id"), nullable=False)
+    
+    # Workflow transitions
+    from_stage = Column(String(50))
+    to_stage = Column(String(50))
+    status = Column(String(50)) # Kept as String for backward compatibility with older data, but logically mapped to ActivityStatus
+    
+    # Operator info
+    operator_id = Column(String)
+    
+    # Timing
+    activity_start_at = Column(DateTime(timezone=True), server_default=func.now())
+    activity_end_at = Column(DateTime(timezone=True), nullable=True)
+    
+    # STAR Framework
+    situation = Column(Text)
+    task_role = Column(Text) # Renamed from 'task' to avoid conflict
+    action = Column(Text)
+    title = Column(String(255))
+    result = Column(Text)
+    tie_back = Column(Text)
+    
+    # RAG / Knowledge Base (Fields removed as per user request to stop RAG implementation)
+
+    
+    # Metadata
+    activity_type = Column(String(50))
+    is_public = Column(Boolean, default=True)
+    workflow_metadata = Column("workflow_metadata", JSON)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Full Text Search
+    search_vector = Column(TSVECTOR)
+    
+    # Relationships
+    task = relationship("Task", back_populates="workflow_history")
+
+    __table_args__ = (
+        Index('ix_task_workflow_history_activity_end_at', 'activity_end_at'),
+        Index('ix_task_workflow_history_search_vector', 'search_vector', postgresql_using='gin'),
+    )
 

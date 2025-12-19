@@ -86,12 +86,12 @@ Initializing database...
 
 ## 🎮 Start the Application
 
-### Terminal 1 - Backend (Port 8082)
+### Terminal 1 - Backend (Port 8000)
 
 ```bash
 cd /Volumes/ExtNVMe/ai_engineering_class1/ai_code_generation_platform/ai-code-platform/backend
 source venv/bin/activate
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8082
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### Terminal 2 - Frontend (Port 3012)
@@ -117,7 +117,7 @@ Login with:
 |---------|------------|-----------|-----|
 | PostgreSQL | 5432 | **5433** | localhost:5433 |
 | Redis | 6379 | **6380** | localhost:6380 |
-| Backend API | - | **8082** | http://localhost:8082 |
+| Backend API | - | **8000** | http://localhost:8000 |
 | Frontend | - | **3012** | http://localhost:3012 |
 
 ---

@@ -46,20 +46,20 @@ if [ ! -f ".env.local" ]; then
     cat > .env.local << 'EOF'
 # Frontend Environment Configuration
 
-# Backend API URL - Updated to port 8082
-NEXT_PUBLIC_API_URL=http://localhost:8082
+# Backend API URL - Updated to port 8000
+NEXT_PUBLIC_API_URL=http://localhost:8000
 
 # App Configuration
 NEXT_PUBLIC_APP_NAME="AI Code Generation Platform"
 NEXT_PUBLIC_APP_VERSION="0.1.0"
 EOF
-    echo -e "${GREEN}✓ .env.local file created with API URL: http://localhost:8082${NC}"
+    echo -e "${GREEN}✓ .env.local file created with API URL: http://localhost:8000${NC}"
 else
     echo -e "${GREEN}✓ .env.local file already exists${NC}"
     # Check if API URL is set correctly
-    if grep -q "NEXT_PUBLIC_API_URL=http://localhost:8000" .env.local; then
-        sed -i.bak 's|NEXT_PUBLIC_API_URL=http://localhost:8000|NEXT_PUBLIC_API_URL=http://localhost:8082|g' .env.local
-        echo -e "${GREEN}✓ Updated API URL to port 8082${NC}"
+    if grep -q "NEXT_PUBLIC_API_URL=http://localhost:8082" .env.local; then
+        sed -i.bak 's|NEXT_PUBLIC_API_URL=http://localhost:8082|NEXT_PUBLIC_API_URL=http://localhost:8000|g' .env.local
+        echo -e "${GREEN}✓ Updated API URL to port 8000${NC}"
     fi
 fi
 
@@ -67,7 +67,7 @@ echo -e "\n${GREEN}=================================================="
 echo "✓ Frontend setup complete!"
 echo "==================================================${NC}"
 echo -e "\nNext steps:"
-echo "1. Make sure the backend is running on http://localhost:8082"
+echo "1. Make sure the backend is running on http://localhost:8000"
 echo ""
 echo "2. Start the development server:"
 echo "   npm run dev"

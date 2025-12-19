@@ -8,7 +8,7 @@ set -e
 
 echo "╔════════════════════════════════════════════════════════════╗"
 echo "║   AI Code Generation Platform - Complete Setup            ║"
-echo "║   Backend Port: 8082                                       ║"
+echo "║   Backend Port: 8000                                       ║"
 echo "╚════════════════════════════════════════════════════════════╝"
 
 # Colors
@@ -55,7 +55,7 @@ fi
 
 # Setup Backend
 echo -e "\n${BLUE}═══════════════════════════════════════${NC}"
-echo -e "${BLUE}Setting up Backend (Port 8082)${NC}"
+echo -e "${BLUE}Setting up Backend (Port 8000)${NC}"
 echo -e "${BLUE}═══════════════════════════════════════${NC}"
 
 cd backend
@@ -83,9 +83,9 @@ if [ ! -f ".env" ]; then
 # Database
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/ai_code_platform
 
-# Server - Running on port 8082
+# Server - Running on port 8000
 HOST=0.0.0.0
-PORT=8082
+PORT=8000
 
 # Security
 SECRET_KEY=test-secret-key-for-development-only-change-in-production
@@ -106,16 +106,16 @@ ANTHROPIC_API_KEY=
 GITHUB_TOKEN=
 JIRA_API_TOKEN=
 EOF
-    echo -e "${GREEN}✓ .env file created with PORT=8082${NC}"
+    echo -e "${GREEN}✓ .env file created with PORT=8000${NC}"
     echo -e "${YELLOW}⚠️  Edit backend/.env to add your API keys for full functionality${NC}"
 else
-    # Update existing .env to use port 8082
+    # Update existing .env to use port 8000
     if ! grep -q "^PORT=" .env; then
-        echo "PORT=8082" >> .env
-        echo -e "${GREEN}✓ Added PORT=8082 to .env${NC}"
-    elif grep -q "^PORT=8000" .env; then
-        sed -i.bak 's/^PORT=8000/PORT=8082/g' .env
-        echo -e "${GREEN}✓ Updated PORT to 8082 in .env${NC}"
+        echo "PORT=8000" >> .env
+        echo -e "${GREEN}✓ Added PORT=8000 to .env${NC}"
+    elif grep -q "^PORT=8082" .env; then
+        sed -i.bak 's/^PORT=8082/PORT=8000/g' .env
+        echo -e "${GREEN}✓ Updated PORT to 8000 in .env${NC}"
     else
         echo -e "${GREEN}✓ .env file already exists${NC}"
     fi
@@ -136,16 +136,16 @@ echo -e "${GREEN}✓ Frontend dependencies installed${NC}"
 if [ ! -f ".env.local" ]; then
     echo -e "${YELLOW}Creating .env.local file...${NC}"
     cat > .env.local << 'EOF'
-# Backend API URL - Port 8082
-NEXT_PUBLIC_API_URL=http://localhost:8082
+# Backend API URL - Port 8000
+NEXT_PUBLIC_API_URL=http://localhost:8000
 NEXT_PUBLIC_APP_NAME="AI Code Generation Platform"
 EOF
-    echo -e "${GREEN}✓ .env.local file created with API URL: http://localhost:8082${NC}"
+    echo -e "${GREEN}✓ .env.local file created with API URL: http://localhost:8000${NC}"
 else
-    # Update existing .env.local to use port 8082
-    if grep -q "localhost:8000" .env.local; then
-        sed -i.bak 's|localhost:8000|localhost:8082|g' .env.local
-        echo -e "${GREEN}✓ Updated API URL to port 8082 in .env.local${NC}"
+    # Update existing .env.local to use port 8000
+    if grep -q "localhost:8082" .env.local; then
+        sed -i.bak 's|localhost:8082|localhost:8000|g' .env.local
+        echo -e "${GREEN}✓ Updated API URL to port 8000 in .env.local${NC}"
     else
         echo -e "${GREEN}✓ .env.local file already exists${NC}"
     fi
@@ -170,10 +170,10 @@ echo -e "   python init_db.py"
 echo -e "\n${YELLOW}3. Start Redis (if not running):${NC}"
 echo -e "   redis-server"
 
-echo -e "\n${YELLOW}4. Start the backend on port 8082 (in a new terminal):${NC}"
+echo -e "\n${YELLOW}4. Start the backend on port 8000 (in a new terminal):${NC}"
 echo -e "   cd backend"
 echo -e "   source venv/bin/activate"
-echo -e "   uvicorn app.main:app --reload --host 0.0.0.0 --port 8082"
+echo -e "   uvicorn app.main:app --reload --host 0.0.0.0 --port 8000"
 
 echo -e "\n${YELLOW}5. Start the frontend (in another terminal):${NC}"
 echo -e "   cd frontend"
@@ -181,8 +181,8 @@ echo -e "   npm run dev"
 
 echo -e "\n${YELLOW}6. Access the application:${NC}"
 echo -e "   Frontend: ${GREEN}http://localhost:3000${NC}"
-echo -e "   Backend API: ${GREEN}http://localhost:8082${NC}"
-echo -e "   API Docs: ${GREEN}http://localhost:8082/docs${NC}"
+echo -e "   Backend API: ${GREEN}http://localhost:8000${NC}"
+echo -e "   API Docs: ${GREEN}http://localhost:8000/docs${NC}"
 
 echo -e "\n${YELLOW}7. Login with test credentials:${NC}"
 echo -e "   Email: ${GREEN}test@example.com${NC}"

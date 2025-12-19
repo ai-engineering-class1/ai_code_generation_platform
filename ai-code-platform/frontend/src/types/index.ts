@@ -15,8 +15,8 @@ export interface Project {
   name: string
   description: string
   ownerId: string
-  jiraProjectKey?: string
-  githubRepoUrl?: string
+  jira_project_key?: string
+  github_repo_url?: string
   status: 'active' | 'paused' | 'completed' | 'archived'
   createdAt: string
   updatedAt: string
@@ -118,8 +118,20 @@ export interface WorkflowHistory {
   taskId: string
   fromStage?: string
   toStage?: string
+  title?: string
   status?: string
+  operatorId?: string
+  action?: string
+  result?: string
+  situation?: string
+  activityStartAt?: string
+  activityEndAt?: string
+  activityType?: string
+  isPublic?: boolean
+  task?: string
+  tieBack?: string
   metadata?: Record<string, any>
+  workflow_metadata?: Record<string, any>
   createdAt: string
 }
 
