@@ -54,5 +54,3 @@ htmlcov/
 *.seed
 *.pid.lock
 .cache
-
-temp_openspec/
