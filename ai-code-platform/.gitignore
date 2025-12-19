@@ -55,3 +55,4 @@ htmlcov/
 *.pid.lock
 .cache
 
+temp_openspec/
