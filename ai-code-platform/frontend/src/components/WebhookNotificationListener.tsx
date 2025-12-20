@@ -48,7 +48,7 @@ export default function WebhookNotificationListener() {
     const mostRecent = notifications[0]
 
     // Check if this is a webhook-related notification
-    const isWebhookNotification = 
+    const isWebhookNotification =
       mostRecent.title.includes('Pull Request') ||
       mostRecent.title.includes('Workflow') ||
       mostRecent.title.includes('Push') ||
@@ -95,16 +95,11 @@ export default function WebhookNotificationListener() {
       icon: icon,
       action: mostRecent.actionUrl
         ? {
-            label: 'View',
-            onClick: () => {
-              window.open(mostRecent.actionUrl, '_blank')
-            },
-          }
-        : undefined,
-      onClick: mostRecent.actionUrl
-        ? () => {
+          label: 'View',
+          onClick: () => {
             window.open(mostRecent.actionUrl, '_blank')
-          }
+          },
+        }
         : undefined,
     })
 
