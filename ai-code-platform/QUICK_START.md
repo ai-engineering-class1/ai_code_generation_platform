@@ -40,6 +40,7 @@ GITHUB_TOKEN=your-github-token-here
 REDIS_URL=redis://localhost:6379/0
 CORS_ORIGINS=["http://localhost:3000"]
 DEBUG=True
+TERMINAL_GUARD_ENABLED=true
 ```
 
 **Note:** You can test basic features without API keys, but you'll need them for:
