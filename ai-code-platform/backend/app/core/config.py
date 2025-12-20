@@ -47,11 +47,16 @@ class Settings(BaseSettings):
     API_TIMEOUT_MS: int = 600000
     CLAUDE_EXECUTABLE_PATH: str = "claude"
     
+    # Claude Web API (Remote Agent)
+    CLAUDE_WEB_API_URL: str = "http://103.98.213.149:8520"
+    CLAUDE_WEB_API_TOKEN: str = "sk-placeholder"
+    REMOTE_AGENT_TIMEOUT_SEC: int = 60
+    
     # Terminal
     TERMINAL_SAFE_MODE: bool = True
     
     # CORS
-    CORS_ORIGINS: List[str] = ["http://localhost:3012", "http://localhost:3000"]
+    CORS_ORIGINS: List[str] = ["http://localhost:3012", "http://localhost:3000", "http://127.0.0.1:3012"]
     
     # Celery
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"

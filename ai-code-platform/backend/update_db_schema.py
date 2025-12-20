@@ -69,8 +69,112 @@ def update_schema():
                 print("✓ workflow_metadata column already exists")
         except Exception as e:
             print(f"Error checking/updating workflow_metadata: {e}")
-    
-    print("\n✓ Database schema update complete!")
+
+        # Add new columns for TaskWorkflowHistory
+        new_columns = {
+            'operator_id': 'VARCHAR',
+            'activity_start_at': 'TIMESTAMP WITH TIME ZONE DEFAULT NOW()',
+            'activity_end_at': 'TIMESTAMP WITH TIME ZONE DEFAULT NULL',
+            'situation': 'TEXT',
+            'task_role': 'TEXT',
+            'action': 'TEXT',
+            'result': 'TEXT',
+            'tie_back': 'TEXT',
+            'activity_type': 'VARCHAR(50)',
+            'is_public': 'BOOLEAN DEFAULT TRUE',
+            'updated_at': 'TIMESTAMP WITH TIME ZONE DEFAULT NOW()',
+            'search_vector': 'TSVECTOR',
+            'title': 'VARCHAR(255)'
+        }
+
+        try:
+            print("\nChecking new columns for task_workflow_history...")
+            # Get existing columns
+            result = conn.execute(text("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name='task_workflow_history'
+            """))
+            existing_columns = [row[0] for row in result.fetchall()]
+            
+            for col_name, col_type in new_columns.items():
+                if col_name not in existing_columns:
+                    print(f"Adding column {col_name}...")
+                    conn.execute(text(f"""
+                        ALTER TABLE task_workflow_history 
+                        ADD COLUMN {col_name} {col_type}
+                    """))
+                    print(f"✓ {col_name} added")
+                else:
+                    print(f"✓ {col_name} already exists")
+            
+            conn.commit()
+            
+            # Create Indices
+            print("\nChecking indices...")
+            # activity_end_at index
+            try:
+                conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS ix_task_workflow_history_activity_end_at 
+                    ON task_workflow_history (activity_end_at)
+                """))
+                print("✓ ix_task_workflow_history_activity_end_at ensured")
+            except Exception as e:
+                print(f"Error creating index on activity_end_at: {e}")
+
+            # GIN index for search_vector
+            try:
+                conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS ix_task_workflow_history_search_vector 
+                    ON task_workflow_history USING GIN (search_vector)
+                """))
+                print("✓ ix_task_workflow_history_search_vector ensured")
+            except Exception as e:
+                print(f"Error creating GIN index: {e}")
+
+            # Create Trigger for auto-updating search_vector
+            # We use a helper function to coalesce nulls to empty strings
+            print("\nSetting up Full Text Search trigger...")
+            trigger_func_sql = """
+            CREATE OR REPLACE FUNCTION task_workflow_history_search_vector_update() RETURNS trigger AS $$
+            BEGIN
+                NEW.search_vector :=
+                    setweight(to_tsvector('english', COALESCE(NEW.situation, '')), 'A') ||
+                    setweight(to_tsvector('english', COALESCE(NEW.task_role, '')), 'B') ||
+                    setweight(to_tsvector('english', COALESCE(NEW.action, '')), 'C') ||
+                    setweight(to_tsvector('english', COALESCE(NEW.result, '')), 'D');
+                RETURN NEW;
+            END
+            $$ LANGUAGE plpgsql;
+            """
+            conn.execute(text(trigger_func_sql))
+            
+            trigger_sql = """
+            DROP TRIGGER IF EXISTS tsvectorupdate ON task_workflow_history;
+            CREATE TRIGGER tsvectorupdate BEFORE INSERT OR UPDATE
+            ON task_workflow_history FOR EACH ROW EXECUTE FUNCTION task_workflow_history_search_vector_update();
+            """
+            conn.execute(text(trigger_sql))
+            conn.commit()
+            print("✓ Full Text Search trigger configured")
+
+        except Exception as e:
+            print(f"Error updating task_workflow_history: {e}")
+
+
+        try:
+            print("\nEnsuring activity_end_at has no default value (fix for freezing bug)...")
+            conn.execute(text("ALTER TABLE task_workflow_history ALTER COLUMN activity_end_at DROP DEFAULT"))
+            # Also drop NOT NULL if it exists, to allow active activities
+            try:
+                 conn.execute(text("ALTER TABLE task_workflow_history ALTER COLUMN activity_end_at DROP NOT NULL"))
+            except Exception:
+                 pass
+            conn.commit()
+            print("✓ activity_end_at default dropped")
+        except Exception as e:
+            # It might fail if default didn't exist, which is fine
+            print(f"Note: Could not drop default (might not exist): {e}")
 
 if __name__ == "__main__":
     update_schema()

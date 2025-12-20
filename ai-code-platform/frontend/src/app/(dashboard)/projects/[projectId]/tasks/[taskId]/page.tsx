@@ -4,10 +4,11 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
-import { ArrowLeft, Clock, User, FileText, GitPullRequest, CheckCircle2, AlertCircle, X, Bot, DollarSign, Timer, Zap, Edit } from 'lucide-react'
+import { ArrowLeft, Clock, User, FileText, GitPullRequest, CheckCircle2, AlertCircle, X, Bot, DollarSign, Timer, Zap, Edit, ChevronDown, ChevronUp, Search, Filter, Calendar, Database } from 'lucide-react'
 import apiClient from '@/lib/api'
 import { TaskDetail, User as UserType } from '@/types'
 import Dashboard from '@/components/openspec/Dashboard'
+import { Modal } from '@/components/Modal'
 import { OpenSpecProject } from '@/lib/types/openspec'
 
 // Agent Task response interface
@@ -55,7 +56,30 @@ export default function TaskDetailPage({
 
   const queryClient = useQueryClient()
   const [agentTaskId, setAgentTaskId] = useState<string | null>(null)
+  // State for Activity Sync
+  const [currentActivityId, setCurrentActivityId] = useState<string | null>(null)
+  const [lastSyncedStatus, setLastSyncedStatus] = useState<string | null>(null)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [expandedActivityIds, setExpandedActivityIds] = useState<Set<string>>(new Set())
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [searchFilters, setSearchFilters] = useState({
+    query: '',
+    status: '',
+    type: '',
+    fromStage: '',
+    toStage: '',
+    isPublic: '', // 'all', 'public', 'private'
+    startDate: '', // 'YYYY-MM-DDTHH:mm'
+    endDate: '',
+  })
+  const [isManualHandleModalOpen, setIsManualHandleModalOpen] = useState(false)
+  const [manualHandleActivityId, setManualHandleActivityId] = useState<string | null>(null)
+  const [manualHandleAction, setManualHandleAction] = useState('')
+  const [manualHandleResult, setManualHandleResult] = useState('')
+  const [isAssignUserModalOpen, setIsAssignUserModalOpen] = useState(false)
+  const [assignUserActivityId, setAssignUserActivityId] = useState<string | null>(null)
+  const [selectedAssigneeId, setSelectedAssigneeId] = useState('')
+
   const [editFormData, setEditFormData] = useState({
     title: '',
     description: '',
@@ -69,19 +93,7 @@ export default function TaskDetailPage({
   const [activityPage, setActivityPage] = useState(1)
   const [activityPerPage, setActivityPerPage] = useState(5)
 
-  const mockActivities = [
-    { id: 1, date: "2025-12-11 15:30:02", user: "Victor", comment: "analyzed the error log" },
-    { id: 2, date: "2025-12-10 11:20:03", user: "GitHub CI Action", comment: "CI error xxx using a", link: "#", linkLabel: "GitHub link" },
-    { id: 3, date: "2025-12-10 11:20:02", user: "Vicor", comment: "Fixed the issue" },
-    { id: 4, date: "2025-12-09 10:30:02", user: "Tom", comment: "Found an issue xxx with a", link: "#", linkLabel: "Jira link" },
-    // Adding more mock data to demonstrate pagination if needed
-    { id: 5, date: "2025-12-08 14:00:00", user: "Alice", comment: "Checked requirements" },
-    { id: 6, date: "2025-12-08 09:15:00", user: "Bob", comment: "Created initial task" },
-  ]
 
-  const totalActivityCount = mockActivities.length
-  const totalActivityPages = Math.ceil(totalActivityCount / activityPerPage)
-  const paginatedActivities = mockActivities.slice((activityPage - 1) * activityPerPage, activityPage * activityPerPage)
 
   const { data: task, isLoading, error } = useQuery<TaskDetail>({
     queryKey: ['task', projectId, taskId],
@@ -132,6 +144,8 @@ export default function TaskDetailPage({
     retryDelay: 2000,
   })
 
+
+
   // Fetch project details for breadcrumbs
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
@@ -142,14 +156,247 @@ export default function TaskDetailPage({
     enabled: !!projectId
   })
 
+  // Fetch current user
+  const { data: currentUser } = useQuery({
+    queryKey: ['currentUser'],
+    queryFn: async () => {
+      const response = await apiClient.get('/auth/me')
+      return response.data
+    }
+  })
+
   // Fetch users for assignee dropdown
   const { data: users = [] } = useQuery<UserType[]>({
     queryKey: ['users'],
+
     queryFn: async () => {
       const response = await apiClient.get('/auth/users')
       return response.data
     },
   })
+
+  // Date formatting helper
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return 'Invalid Date'
+    try {
+      const date = new Date(dateString)
+      // Check if date is valid
+      if (isNaN(date.getTime())) return 'Invalid Date'
+
+      return new Intl.DateTimeFormat('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: 'numeric',
+        hour12: true
+      }).format(date)
+    } catch (e) {
+      return 'Invalid Date'
+    }
+  }
+
+  const toggleActivity = (id: string) => {
+    setExpandedActivityIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  const renderActivityItem = (activity: any, isActiveSection: boolean) => {
+    const isExpanded = expandedActivityIds.has(activity.id)
+    return (
+      <div key={activity.id} className={`block border rounded-lg overflow-hidden transition-all ${isActiveSection ? 'border-blue-100 bg-blue-50/30' : 'border-gray-200 hover:border-blue-500 bg-white'
+        }`}>
+        {/* Header Row */}
+        <div
+          className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50/50"
+          onClick={() => toggleActivity(activity.id)}
+        >
+          {/* Left: User */}
+          <div className="flex items-center gap-2 w-1/4 min-w-[150px]">
+            {isActiveSection || activity.operatorId?.includes('Agent') ? (
+              <Bot className={`w-4 h-4 ${isActiveSection ? 'text-blue-600' : 'text-purple-600'}`} />
+            ) : (
+              <User className="w-4 h-4 text-gray-500" />
+            )}
+            <span className={`text-sm font-medium truncate ${isActiveSection ? 'text-blue-700' : 'text-gray-900'}`}>
+              {activity.operatorId || 'Unknown User'}
+            </span>
+          </div>
+
+          {/* Center: Title */}
+          <div className="flex-1 flex flex-col items-center justify-center text-center px-4">
+            <span className="font-semibold text-gray-900">{activity.title}</span>
+            <div className="flex flex-wrap items-center justify-center gap-2 mt-1">
+              {/* Status Badge */}
+              {activity.status && (
+                <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${activity.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                  activity.status === 'pending_user_input' ? 'bg-yellow-100 text-yellow-800' :
+                    activity.status === 'failed' ? 'bg-red-100 text-red-700' :
+                      'bg-gray-100 text-gray-600'
+                  }`}>
+                  {activity.status}
+                </span>
+              )}
+              {/* Type & Stage Info */}
+              {(activity.activityType || activity.fromStage || activity.toStage) && (
+                <div className="flex items-center gap-1 text-[10px] text-gray-500">
+                  {activity.activityType && <span className="px-1 border border-gray-200 rounded">{activity.activityType}</span>}
+                  {(activity.fromStage || activity.toStage) && (
+                    <span className="flex items-center gap-1">
+                      {activity.fromStage || '?'} <ArrowLeft className="w-2 h-2 rotate-180" /> {activity.toStage || '?'}
+                    </span>
+                  )}
+                </div>
+              )}
+              {/* Public flag */}
+              {activity.isPublic !== undefined && !activity.isPublic && (
+                <span className="text-[10px] bg-yellow-50 text-yellow-700 px-1 rounded border border-yellow-100">Private</span>
+              )}
+            </div>
+          </div>
+
+          {/* Right: Date & Expand */}
+          <div className="flex items-center justify-end gap-3 w-1/4 min-w-[150px]">
+            <span className="text-xs text-gray-500 whitespace-nowrap">
+              {formatDate(activity.createdAt)}
+            </span>
+            <button
+              className="p-1 hover:bg-gray-200 rounded-full text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+
+        {/* Expanded Details - S.T.A.R. Article */}
+        {isExpanded && (
+          <div className="px-6 pb-6 pt-2 border-t border-gray-100 bg-gray-50/50">
+            <div className="prose prose-sm max-w-none">
+              <div className="grid gap-4 bg-white p-4 rounded-md border border-gray-200 shadow-sm">
+                {/* Detailed Metadata Grid */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-3 bg-gray-50 rounded text-xs border border-gray-100">
+                  <div>
+                    <span className="text-gray-400 block mb-1">Status</span>
+                    <span className="font-medium text-gray-700">{activity.status || 'N/A'}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 block mb-1">Type</span>
+                    <span className="font-medium text-gray-700">{activity.activityType || 'General'}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 block mb-1">Stage Transition</span>
+                    <span className="font-medium text-gray-700 flex items-center gap-1">
+                      {activity.fromStage || '-'} <ArrowLeft className="w-3 h-3 rotate-180" /> {activity.toStage || '-'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 block mb-1">Visibility</span>
+                    <span className="font-medium text-gray-700">{activity.isPublic === false ? 'Private' : 'Public'}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 block mb-1">Start Time</span>
+                    <span className="font-medium text-gray-700">{formatDate(activity.activityStartAt)}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 block mb-1">End Time</span>
+                    <span className="font-medium text-gray-700">{formatDate(activity.activityEndAt)}</span>
+                  </div>
+                </div>
+                {/* Situation */}
+                <div>
+                  <h4 className="flex items-center gap-2 text-gray-700 font-bold text-xs uppercase tracking-wider mb-1">
+                    < AlertCircle className="w-3 h-3" /> Situation
+                  </h4>
+                  <p className="text-gray-600">{activity.situation || 'No context provided.'}</p>
+                </div>
+
+                {/* Task */}
+                <div>
+                  <h4 className="flex items-center gap-2 text-gray-800 font-bold text-xs uppercase tracking-wider mb-1">
+                    <FileText className="w-3 h-3" /> Task Role
+                  </h4>
+                  <p className="text-gray-700">{activity.task || activity.title || 'No task description.'}</p>
+                </div>
+
+                {/* Action */}
+                <div>
+                  <h4 className="flex items-center gap-2 text-blue-700 font-bold text-xs uppercase tracking-wider mb-1">
+                    <Zap className="w-3 h-3" /> Action
+                  </h4>
+                  <p className="text-gray-800 font-medium">{activity.action || 'No detailed action log.'}</p>
+                </div>
+
+                {/* Result */}
+                <div>
+                  <h4 className="flex items-center gap-2 text-green-700 font-bold text-xs uppercase tracking-wider mb-1">
+                    <CheckCircle2 className="w-3 h-3" /> Result
+                  </h4>
+                  <p className="text-gray-600 bg-gray-50 p-2 rounded">{activity.result || 'Pending...'}</p>
+                </div>
+
+                {/* Tie-back */}
+                {activity.tieBack && (
+                  <div>
+                    <h4 className="flex items-center gap-2 text-purple-700 font-bold text-xs uppercase tracking-wider mb-1">
+                      <GitPullRequest className="w-3 h-3" /> Tie-back
+                    </h4>
+                    <p className="text-gray-600 italic">{activity.tieBack}</p>
+                  </div>
+                )}
+
+                {/* Raw Metadata (if available) */}
+                {activity.workflow_metadata && Object.keys(activity.workflow_metadata).length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-gray-100">
+                    <h4 className="flex items-center gap-2 text-indigo-600 font-bold text-xs uppercase tracking-wider mb-1">
+                      <Database className="w-3 h-3" /> Workflow Metadata
+                    </h4>
+                    <pre className="text-xs text-gray-600 bg-gray-50 p-2 rounded overflow-x-auto border border-gray-100">
+                      {JSON.stringify(activity.workflow_metadata, null, 2)}
+                    </pre>
+                  </div>
+                )}
+
+                {/* Active Activity Actions */}
+                {isActiveSection && activity.status === 'pending_user_input' && (
+                  <div className="mt-4 pt-3 border-t border-blue-100 flex gap-3">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setAssignUserActivityId(activity.id)
+                        setSelectedAssigneeId(task?.assigneeId || '')
+                        setIsAssignUserModalOpen(true)
+                      }}
+                      className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+                    >
+                      Assign to others
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setManualHandleActivityId(activity.id)
+                        setManualHandleAction('')
+                        setManualHandleResult('')
+                        setIsManualHandleModalOpen(true)
+                      }}
+                      className="px-3 py-1.5 text-xs font-medium bg-white text-gray-700 border border-gray-300 rounded hover:bg-gray-50 transition"
+                    >
+                      Manually Handled
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   // Query for agent task status
   const { data: agentTask, refetch: refetchAgentTask } = useQuery<AgentTaskResult>({
@@ -160,12 +407,45 @@ export default function TaskDetailPage({
     },
     enabled: !!agentTaskId,
     refetchInterval: (query) => {
-      // Poll every 5 seconds if task is still pending/running
-      // Note: Timer starts AFTER previous request completes, so no congestion
-      if (query.state.data?.status === 'completed') return false
-      return 5000
+      // Poll every 2 seconds if task is running
+      if (query.state.data?.status === 'completed' || query.state.data?.status === 'failed') return false
+      return 2000
     },
   })
+
+  // Sync Loop: Push Agent Status Updates to Activity Log
+  useEffect(() => {
+    if (!agentTask || !currentActivityId) return
+
+    const status = agentTask.status
+    const result = agentTask.result
+
+    // 1. Status Change -> Append Action
+    if (status !== lastSyncedStatus) {
+      if (lastSyncedStatus !== null) { // Don't append on first load unless you want to
+        const actionMsg = `Remote Agent Status: ${status}\n`
+        appendActivityMutation.mutate({ id: currentActivityId, action: actionMsg })
+      }
+      setLastSyncedStatus(status)
+
+      // 2. Completion/Failure -> End Activity (Result)
+      // Moved INSIDE the sentinel check to prevent double-ending
+      if (status === 'completed') {
+        const resultSummary = `Agent Completed.\nDuration: ${agentTask.executionMetrics?.durationMs}ms\nCost: $${agentTask.executionMetrics?.totalCostUsd}\nResult: ${JSON.stringify(result?.result || 'Success')}`
+        endActivityMutation.mutate({
+          id: currentActivityId,
+          result: resultSummary,
+          status: 'completed'
+        })
+      } else if (status === 'failed') {
+        endActivityMutation.mutate({
+          id: currentActivityId,
+          result: `Agent Failed. Error: ${JSON.stringify(result)}`,
+          status: 'failed'
+        })
+      }
+    }
+  }, [agentTask, currentActivityId]) // Run whenever agentTask updates
   // Initialize form data when task loads
   useEffect(() => {
     if (task) {
@@ -177,6 +457,23 @@ export default function TaskDetailPage({
         assigneeId: task.assigneeId || '',
         currentStage: task.currentStage || 'requirement',
       })
+
+      // Auto-detect active agent task from workflow history
+      const activeActivity = task.workflowHistory?.find(
+        (a: any) => a.status === 'in_progress' || a.status === 'running'
+      )
+      if (activeActivity) {
+        if (!agentTaskId) {
+          // Try to recover remote_task_id from workflow_metadata
+          const meta = (activeActivity as any).workflow_metadata
+          if (meta?.remote_task_id) {
+            setAgentTaskId(meta.remote_task_id)
+            setCurrentActivityId(activeActivity.id)
+          }
+        }
+        // Auto-expand active activity by default
+        setExpandedActivityIds(prev => new Set(prev).add(activeActivity.id))
+      }
     }
   }, [task])
 
@@ -206,21 +503,51 @@ export default function TaskDetailPage({
 
 
 
+
+
   const assignToAgentMutation = useMutation({
     mutationFn: async () => {
-      // Call local backend which proxies to remote Claude Web API
-      const response = await apiClient.post('/projects/assign-to-agent')
+      // Call new endpoint which returns an Activity object
+      const response = await apiClient.post(`/projects/${projectId}/tasks/${taskId}/assign`)
       return response.data
     },
-    onSuccess: (data) => {
-      if (data.taskId) {
-        setAgentTaskId(data.taskId)
+    onSuccess: (activity) => {
+      // activity is the ActivityLog object
+      // Backend returns 'workflow_metadata' (renamed from metadata)
+      if (activity.workflow_metadata?.remote_task_id) {
+        setAgentTaskId(activity.workflow_metadata.remote_task_id)
+        setCurrentActivityId(activity.id)
+        setLastSyncedStatus('dispatched') // Initial status
       }
-      alert(`Task assigned to agent successfully! Task ID: ${data.taskId || 'assigned'}`)
+      queryClient.invalidateQueries({ queryKey: ['task', projectId, taskId] })
+      alert(`Task assigned to agent! Remote Task ID: ${activity.workflow_metadata?.remote_task_id}`)
     },
     onError: (error: any) => {
       alert(`Failed to assign to agent: ${error.response?.data?.detail || error.message}`)
     },
+  })
+
+  // Mutation to Append Updates to Activity Log
+  const appendActivityMutation = useMutation({
+    mutationFn: async ({ id, action }: { id: string, action: string }) => {
+      await apiClient.post(`/activities/${id}/append`, { action_chunk: action })
+    }
+  })
+
+  // Mutation to End Activity (Final Result)
+  const endActivityMutation = useMutation({
+    mutationFn: async ({ id, result, status }: { id: string, result: string, status: string }) => {
+      await apiClient.post(`/activities/${id}/end`, { result, status })
+    },
+    onSuccess: async () => {
+      // Invalidate and explicitly refetch to ensure UI updates immediately
+      await queryClient.invalidateQueries({ queryKey: ['task', projectId, taskId] })
+      await queryClient.refetchQueries({ queryKey: ['task', projectId, taskId] })
+
+      setAgentTaskId(null)
+      setCurrentActivityId(null)
+      setLastSyncedStatus(null)
+    }
   })
 
   const updateTaskMutation = useMutation({
@@ -239,6 +566,63 @@ export default function TaskDetailPage({
     },
   })
 
+  // Derived state for activities
+  const sortedActivities = [...(task?.workflowHistory || [])].sort((a, b) => {
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  })
+
+  // Split into Active (in_progress) and Past (log)
+  // Fix: Exclude "dead" activities that might have an end time but stuck status (from previous bugs)
+  const activeActivities = sortedActivities.filter(a =>
+    (a.status === 'in_progress' || a.status === 'running' || a.status === 'pending_user_input') && !a.activityEndAt
+  )
+
+  // Filter Past Activities based on Search Criteria
+  const filteredPastActivities = sortedActivities.filter(a => {
+    // 1. Exclude active
+    if (a.status === 'in_progress' || a.status === 'running' || a.status === 'pending_user_input') return false
+
+    // 2. Query (Full Text) - checks title, action, result, situation, operatorId
+    if (searchFilters.query) {
+      const q = searchFilters.query.toLowerCase()
+      const text = `${a.title || ''} ${a.action || ''} ${a.result || ''} ${a.situation || ''} ${a.operatorId || ''}`.toLowerCase()
+      if (!text.includes(q)) return false
+    }
+
+    // 3. Status
+    if (searchFilters.status && a.status !== searchFilters.status) return false
+
+    // 4. Type
+    if (searchFilters.type && a.activityType !== searchFilters.type) return false
+
+    // 5. From Stage
+    if (searchFilters.fromStage && a.fromStage !== searchFilters.fromStage) return false
+
+    // 6. To Stage
+    if (searchFilters.toStage && a.toStage !== searchFilters.toStage) return false
+
+    // 7. Visibility
+    if (searchFilters.isPublic === 'public' && a.isPublic === false) return false
+    if (searchFilters.isPublic === 'private' && a.isPublic !== false) return false
+
+    // 8. Time Range
+    if (searchFilters.startDate) {
+      if (new Date(a.createdAt) < new Date(searchFilters.startDate)) return false
+    }
+    if (searchFilters.endDate) {
+      if (new Date(a.createdAt) > new Date(searchFilters.endDate)) return false
+    }
+
+    return true
+  })
+
+  // Pagination for Filtered Results
+  const totalActivityPages = Math.ceil(filteredPastActivities.length / activityPerPage)
+  const paginatedActivities = filteredPastActivities.slice(
+    (activityPage - 1) * activityPerPage,
+    activityPage * activityPerPage
+  )
+
   const handleEditSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     const updateData: any = {}
@@ -254,8 +638,62 @@ export default function TaskDetailPage({
       console.log('Assignee change detected:', { current: currentAssigneeId, new: newAssigneeId })
     }
     if (editFormData.currentStage !== task?.currentStage) updateData.current_stage = editFormData.currentStage
-    console.log('Updating task with data:', updateData)
+
     updateTaskMutation.mutate(updateData)
+  }
+
+  const handleManualHandleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!manualHandleActivityId || (!manualHandleAction.trim() && !manualHandleResult.trim())) return
+
+    const operatorName = currentUser?.name || currentUser?.email || 'Unknown User'
+    const fullAction = `\n[Manual User: ${operatorName}]: ${manualHandleAction}`
+
+    // Chain: Append -> End
+    appendActivityMutation.mutate(
+      { id: manualHandleActivityId, action: fullAction },
+      {
+        onSuccess: () => {
+          endActivityMutation.mutate({
+            id: manualHandleActivityId,
+            result: manualHandleResult || 'Manually handled by user.',
+            status: 'completed'
+          }, {
+            onSuccess: () => {
+              setIsManualHandleModalOpen(false)
+              setManualHandleActivityId(null)
+              setManualHandleAction('')
+              setManualHandleResult('')
+              alert('Activity handled successfully.')
+            },
+            onError: (err: any) => {
+              alert(`Failed to complete activity: ${err.message}`)
+            }
+          })
+        },
+        onError: (err: any) => {
+          alert(`Failed to append aciton: ${err.message}`)
+        }
+      }
+    )
+  }
+
+  const handleAssignUserSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedAssigneeId) return
+
+    updateTaskMutation.mutate(
+      { assignee_id: selectedAssigneeId },
+      {
+        onSuccess: () => {
+          // Optional: Add an activity log entry about the reassignment?
+          // For now, just close the modal. The query invalidation in updateTaskMutation will refresh the UI.
+          setIsAssignUserModalOpen(false)
+          setAssignUserActivityId(null)
+          // alert('Task re-assigned successfully.') // rely on updateTaskMutation's alert
+        }
+      }
+    )
   }
 
   if (isLoading) {
@@ -272,7 +710,17 @@ export default function TaskDetailPage({
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <p className="text-red-600 font-semibold mb-2">Error loading task</p>
-          <p className="text-gray-600 text-sm mb-4">{errorMessage}</p>
+          <p className="text-gray-600 text-sm mb-4">
+            {errorMessage === 'Network Error'
+              ? 'Cannot connect to backend. Is the server running on http://localhost:8000? Check CORS settings.'
+              : errorMessage}
+          </p>
+          <button
+            onClick={() => { window.location.reload() }}
+            className="mb-4 text-xs bg-gray-200 hover:bg-gray-300 rounded px-2 py-1"
+          >
+            Retry/Reload
+          </button>
           <div className="space-y-2 text-sm text-gray-500">
             <p>Task ID: {taskId}</p>
             <p>Project ID: {projectId}</p>
@@ -463,143 +911,39 @@ export default function TaskDetailPage({
               </div>
             )}
 
-            {/* Workflow History */}
-            {task.workflowHistory && task.workflowHistory.length > 0 && (
-              <div className="bg-white rounded-lg shadow p-6">
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">Workflow History</h2>
-                <div className="space-y-3">
-                  {task.workflowHistory.map((history) => (
-                    <div key={history.id} className="flex items-start space-x-3 pb-3 border-b border-gray-200 last:border-0">
-                      <div className="flex-shrink-0 mt-1">
-                        <Clock className="h-4 w-4 text-gray-400" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm text-gray-900">
-                          Moved from <span className="font-medium">{history.fromStage || 'N/A'}</span> to{' '}
-                          <span className="font-medium">{history.toStage || 'N/A'}</span>
-                        </p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {new Date(history.createdAt).toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+
 
             {/* Agent Execution Result */}
-            {agentTask && (
-              <div className={`bg-gradient-to-br rounded-lg shadow p-6 border ${agentTask.result?.subtype === 'success' ? 'from-green-50 to-emerald-50 border-green-200' :
-                agentTask.result?.is_error ? 'from-red-50 to-rose-50 border-red-200' :
-                  'from-purple-50 to-indigo-50 border-purple-200'
-                }`}>
-                <div className="flex items-center gap-2 mb-4 flex-wrap">
-                  <Bot className="h-5 w-5 text-purple-600" />
-                  <h2 className="text-lg font-semibold text-gray-900">Agent Execution Result</h2>
-                  <div className="ml-auto flex items-center gap-2">
-                    {/* Subtype badge (success/error) */}
-                    {agentTask.result?.subtype && (
-                      <span className={`px-3 py-1 text-sm rounded-full font-medium flex items-center gap-1 ${agentTask.result.subtype === 'success' ? 'bg-green-100 text-green-800' :
-                        'bg-red-100 text-red-800'
-                        }`}>
-                        {agentTask.result.subtype === 'success' ? (
-                          <CheckCircle2 className="h-3 w-3" />
-                        ) : (
-                          <AlertCircle className="h-3 w-3" />
-                        )}
-                        {agentTask.result.subtype}
-                      </span>
-                    )}
-                    {/* Status badge */}
-                    <span className={`px-3 py-1 text-sm rounded-full font-medium ${agentTask.status === 'completed' ? 'bg-blue-100 text-blue-800' :
-                      agentTask.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                        agentTask.status === 'running' ? 'bg-blue-100 text-blue-800' :
-                          'bg-gray-100 text-gray-800'
-                      }`}>
-                      {agentTask.status}
-                    </span>
-                  </div>
+            {/* Active Activities - From DB WorkflowHistory */}
+            {activeActivities.length > 0 && (
+              <div className="bg-white rounded-lg shadow mt-6 border-l-4 border-blue-500">
+                <div className="px-6 py-4 border-b border-gray-200">
+                  <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                    <Zap className="h-5 w-5 text-blue-500" />
+                    Active Activities
+                  </h2>
                 </div>
-
-                {/* Metrics Grid */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                  <div className="bg-white rounded-lg p-3 shadow-sm">
-                    <div className="flex items-center gap-1 text-gray-500 text-xs mb-1">
-                      <DollarSign className="h-3 w-3" />
-                      Total Cost
-                    </div>
-                    <p className="text-lg font-semibold text-gray-900">
-                      ${(agentTask.executionMetrics?.totalCostUsd || agentTask.result?.total_cost_usd || 0).toFixed(4)}
-                    </p>
-                  </div>
-                  <div className="bg-white rounded-lg p-3 shadow-sm">
-                    <div className="flex items-center gap-1 text-gray-500 text-xs mb-1">
-                      <Timer className="h-3 w-3" />
-                      Duration
-                    </div>
-                    <p className="text-lg font-semibold text-gray-900">
-                      {((agentTask.executionMetrics?.durationMs || agentTask.result?.duration_ms || 0) / 1000).toFixed(1)}s
-                    </p>
-                  </div>
-                  <div className="bg-white rounded-lg p-3 shadow-sm">
-                    <div className="flex items-center gap-1 text-gray-500 text-xs mb-1">
-                      <Zap className="h-3 w-3" />
-                      Turns
-                    </div>
-                    <p className="text-lg font-semibold text-gray-900">
-                      {agentTask.executionMetrics?.numTurns || agentTask.result?.num_turns || 0}
-                    </p>
-                  </div>
-                  <div className="bg-white rounded-lg p-3 shadow-sm">
-                    <div className="flex items-center gap-1 text-gray-500 text-xs mb-1">
-                      <Clock className="h-3 w-3" />
-                      Timing
-                    </div>
-                    <p className="text-xs text-gray-700">
-                      {agentTask.startedAt && new Date(agentTask.startedAt).toLocaleTimeString()}
-                      {agentTask.completedAt && ` → ${new Date(agentTask.completedAt).toLocaleTimeString()}`}
-                    </p>
-                  </div>
+                <div className="p-6 space-y-2">
+                  {activeActivities.map((activity) => renderActivityItem(activity, true))}
                 </div>
-
-                {/* Model Usage */}
-                {agentTask.result?.modelUsage && (
-                  <div className="mb-4">
-                    <h3 className="text-sm font-medium text-gray-700 mb-2">Model Usage</h3>
-                    <div className="space-y-2">
-                      {Object.entries(agentTask.result.modelUsage).map(([model, usage]) => (
-                        <div key={model} className="bg-white rounded-lg p-3 shadow-sm">
-                          <p className="text-xs font-mono text-purple-600 mb-1">{model}</p>
-                          <div className="flex gap-4 text-xs text-gray-600">
-                            <span>In: {usage.inputTokens?.toLocaleString() || 0}</span>
-                            <span>Out: {usage.outputTokens?.toLocaleString() || 0}</span>
-                            <span className="text-green-600 font-medium">${usage.costUSD?.toFixed(4) || 0}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Result */}
-                {agentTask.result?.result && (
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-700 mb-2">Result</h3>
-                    <div className="bg-white rounded-lg p-4 shadow-sm max-h-64 overflow-y-auto">
-                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{agentTask.result.result}</p>
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 
-            {/* Mock Activity Log */}
             {/* Activity Log */}
             <div className="bg-white rounded-lg shadow mt-6">
               <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
                 <h2 className="text-lg font-semibold text-gray-900">Activity Log</h2>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
+                  {/* Search Toggle */}
+                  <button
+                    onClick={() => setIsSearchOpen(!isSearchOpen)}
+                    className={`p-2 rounded-md transition-colors flex items-center gap-2 text-sm font-medium ${isSearchOpen ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'
+                      }`}
+                  >
+                    <Search className="w-4 h-4" />
+                    {isSearchOpen ? 'Hide Filters' : 'Search / Filter'}
+                  </button>
+                  <div className="h-4 w-px bg-gray-300"></div>
                   <span className="text-sm text-gray-500">Items per page:</span>
                   <select
                     value={activityPerPage}
@@ -615,32 +959,142 @@ export default function TaskDetailPage({
                   </select>
                 </div>
               </div>
-              <div className="p-6 space-y-4">
-                {paginatedActivities.map((activity) => (
-                  <div key={activity.id} className="block border border-gray-200 rounded-lg p-4 hover:border-blue-500 transition">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-medium text-blue-600 flex items-center gap-2">
-                        <User className="w-3 h-3" />
-                        {activity.user}
-                      </span>
-                      <span className="text-xs text-gray-500">{activity.date}</span>
+
+              {/* Search Panel */}
+              {isSearchOpen && (
+                <div className="px-6 py-4 bg-gray-50 border-b border-gray-200 animate-in fade-in slide-in-from-top-2">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                    {/* Full Text Search */}
+                    <div className="col-span-1 md:col-span-2 lg:col-span-4">
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Full Text Search</label>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          type="text"
+                          placeholder="Search title, action, result, operator..."
+                          className="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                          value={searchFilters.query}
+                          onChange={(e) => setSearchFilters(prev => ({ ...prev, query: e.target.value }))}
+                        />
+                      </div>
                     </div>
-                    <p className="text-gray-700 text-sm">
-                      {activity.comment}
-                      {activity.link && (
-                        <a href={activity.link} className="ml-1 text-blue-500 hover:underline">
-                          {activity.linkLabel}
-                        </a>
-                      )}
-                    </p>
+
+                    {/* Status */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Status</label>
+                      <select
+                        className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                        value={searchFilters.status}
+                        onChange={(e) => setSearchFilters(prev => ({ ...prev, status: e.target.value }))}
+                      >
+                        <option value="">All Statuses</option>
+                        <option value="completed">Completed</option>
+                        <option value="failed">Failed</option>
+                        <option value="in_progress">In Progress</option>
+                      </select>
+                    </div>
+
+                    {/* Type */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Activity Type</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. system, user"
+                        className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                        value={searchFilters.type}
+                        onChange={(e) => setSearchFilters(prev => ({ ...prev, type: e.target.value }))}
+                      />
+                    </div>
+
+                    {/* From Stage */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">From Stage</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. requirement"
+                        className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                        value={searchFilters.fromStage}
+                        onChange={(e) => setSearchFilters(prev => ({ ...prev, fromStage: e.target.value }))}
+                      />
+                    </div>
+
+                    {/* To Stage */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">To Stage</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. implementation"
+                        className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                        value={searchFilters.toStage}
+                        onChange={(e) => setSearchFilters(prev => ({ ...prev, toStage: e.target.value }))}
+                      />
+                    </div>
+
+                    {/* Visibility */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Visibility</label>
+                      <select
+                        className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                        value={searchFilters.isPublic}
+                        onChange={(e) => setSearchFilters(prev => ({ ...prev, isPublic: e.target.value }))}
+                      >
+                        <option value="">Any</option>
+                        <option value="public">Public Only</option>
+                        <option value="private">Private Only</option>
+                      </select>
+                    </div>
+
+                    {/* Date Range Start */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Start Time</label>
+                      <input
+                        type="datetime-local"
+                        className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                        value={searchFilters.startDate}
+                        onChange={(e) => setSearchFilters(prev => ({ ...prev, startDate: e.target.value }))}
+                      />
+                    </div>
+
+                    {/* Date Range End */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">End Time</label>
+                      <input
+                        type="datetime-local"
+                        className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                        value={searchFilters.endDate}
+                        onChange={(e) => setSearchFilters(prev => ({ ...prev, endDate: e.target.value }))}
+                      />
+                    </div>
                   </div>
-                ))}
+
+                  <div className="flex justify-end">
+                    <button
+                      onClick={() => setSearchFilters({
+                        query: '',
+                        status: '',
+                        type: '',
+                        fromStage: '',
+                        toStage: '',
+                        isPublic: '',
+                        startDate: '',
+                        endDate: ''
+                      })}
+                      className="text-sm text-gray-500 hover:text-gray-700 underline"
+                    >
+                      Reset Filters
+                    </button>
+                  </div>
+                </div>
+              )}
+              <div className="p-6 space-y-2">
+                {paginatedActivities.map((activity) => renderActivityItem(activity, false))}
               </div>
+
               {/* Pagination Footer */}
               {totalActivityPages > 1 && (
                 <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
                   <div className="text-sm text-gray-500">
-                    Showing {(activityPage - 1) * activityPerPage + 1} to {Math.min(activityPage * activityPerPage, totalActivityCount)} of {totalActivityCount}
+                    Showing {(activityPage - 1) * activityPerPage + 1} to {Math.min(activityPage * activityPerPage, filteredPastActivities.length)} of {filteredPastActivities.length}
                   </div>
                   <div className="flex space-x-2">
                     <button
@@ -877,7 +1331,101 @@ export default function TaskDetailPage({
           </div>
         )
       }
-    </div >
+
+
+      {/* Manual Handle Modal */}
+      {isManualHandleModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Manual Activity Completion</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Describe what actions you took to complete this step. This will be logged as the final result.
+            </p>
+            <form onSubmit={handleManualHandleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Append to Action Log</label>
+                <textarea
+                  value={manualHandleAction}
+                  onChange={(e) => setManualHandleAction(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md p-2 h-24 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none text-sm"
+                  placeholder="Describe your actions (e.g. 'Updated config file')..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Final Result</label>
+                <textarea
+                  value={manualHandleResult}
+                  onChange={(e) => setManualHandleResult(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md p-2 h-20 focus:ring-1 focus:ring-green-500 focus:border-green-500 outline-none resize-none text-sm"
+                  placeholder="Summary of outcome (e.g. 'Issue Resolved')..."
+                  required
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsManualHandleModalOpen(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!manualHandleResult.trim()}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
+                >
+                  Complete Activity
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Assign User Modal */}
+      <Modal
+        isOpen={isAssignUserModalOpen}
+        onClose={() => setIsAssignUserModalOpen(false)}
+        title="Assign Task to User"
+        size="md"
+      >
+        <form onSubmit={handleAssignUserSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Select User</label>
+            <select
+              value={selectedAssigneeId}
+              onChange={(e) => setSelectedAssigneeId(e.target.value)}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+              required
+            >
+              <option value="">Select a user...</option>
+              {users.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.name || user.email}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex justify-end gap-3 pt-4">
+            <button
+              type="button"
+              onClick={() => setIsAssignUserModalOpen(false)}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!selectedAssigneeId || updateTaskMutation.isPending}
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
+            >
+              {updateTaskMutation.isPending ? 'Assigning...' : 'Assign'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+    </div>
   )
 }
 
@@ -931,5 +1479,3 @@ function getCodeGenStatusColor(status: string): string {
       return 'bg-gray-100 text-gray-800'
   }
 }
-
-

@@ -118,8 +118,20 @@ export interface WorkflowHistory {
   taskId: string
   fromStage?: string
   toStage?: string
+  title?: string
   status?: string
+  operatorId?: string
+  action?: string
+  result?: string
+  situation?: string
+  activityStartAt?: string
+  activityEndAt?: string
+  activityType?: string
+  isPublic?: boolean
+  task?: string
+  tieBack?: string
   metadata?: Record<string, any>
+  workflow_metadata?: Record<string, any>
   createdAt: string
 }
 

@@ -10,11 +10,114 @@ from app.models.workflow import Specification, CodeGeneration, CodeGenerationSta
 from app.schemas.integration import GitHubConfigCreate, GitHubConfigUpdate, GitHubConfigResponse
 from app.services.github_service import GitHubService
 from app.services.claude_service import ClaudeService
+from app.services.notification_service import create_notification
+from app.models.notification import NotificationType
+from app.models.user import User
 from datetime import datetime
 import hmac
 import hashlib
 
 router = APIRouter()
+
+
+async def notify_webhook_event(db: Session, event_type: str, action: str, payload: dict):
+    """Create notifications for all users when webhook events are received"""
+    try:
+        # Get all active users to notify them
+        users = db.query(User).filter(User.is_active == True).all()
+        
+        # Determine notification details based on event type
+        if event_type == "pull_request":
+            pull_request = payload.get("pull_request", {})
+            pr_number = pull_request.get("number")
+            pr_title = pull_request.get("title", "Untitled PR")
+            pr_url = pull_request.get("html_url", "")
+            repository = payload.get("repository", {})
+            repo_name = repository.get("full_name", "Unknown")
+            
+            if action == "opened":
+                title = f"New Pull Request: #{pr_number}"
+                message = f"Pull request opened in {repo_name}: {pr_title}"
+            elif action == "closed":
+                if pull_request.get("merged"):
+                    title = f"Pull Request Merged: #{pr_number}"
+                    message = f"Pull request #{pr_number} was merged in {repo_name}"
+                else:
+                    title = f"Pull Request Closed: #{pr_number}"
+                    message = f"Pull request #{pr_number} was closed in {repo_name}"
+            else:
+                title = f"Pull Request Updated: #{pr_number}"
+                message = f"Pull request #{pr_number} was {action} in {repo_name}"
+            
+            notification_type = NotificationType.INFO
+            action_url = pr_url if pr_url else None
+            
+        elif event_type == "workflow_run":
+            workflow_run = payload.get("workflow_run", {})
+            workflow_name = workflow_run.get("name", "Workflow")
+            conclusion = workflow_run.get("conclusion", "unknown")
+            repository = payload.get("repository", {})
+            repo_name = repository.get("full_name", "Unknown")
+            
+            if conclusion == "success":
+                title = f"Workflow Succeeded: {workflow_name}"
+                message = f"Workflow '{workflow_name}' completed successfully in {repo_name}"
+                notification_type = NotificationType.INFO
+            elif conclusion == "failure":
+                title = f"Workflow Failed: {workflow_name}"
+                message = f"Workflow '{workflow_name}' failed in {repo_name}"
+                notification_type = NotificationType.ERROR
+            else:
+                title = f"Workflow {action}: {workflow_name}"
+                message = f"Workflow '{workflow_name}' {action} in {repo_name}"
+                notification_type = NotificationType.INFO
+            
+            action_url = workflow_run.get("html_url", "")
+            
+        elif event_type == "push":
+            ref = payload.get("ref", "")
+            commits = payload.get("commits", [])
+            repository = payload.get("repository", {})
+            repo_name = repository.get("full_name", "Unknown")
+            branch = ref.replace("refs/heads/", "") if ref.startswith("refs/heads/") else ref
+            
+            commit_count = len(commits)
+            if commit_count > 0:
+                last_commit = commits[0]
+                commit_message = last_commit.get("message", "No message")
+                title = f"Push to {branch}"
+                message = f"{commit_count} commit(s) pushed to {branch} in {repo_name}: {commit_message[:50]}"
+            else:
+                title = f"Push to {branch}"
+                message = f"Push event to {branch} in {repo_name}"
+            
+            notification_type = NotificationType.INFO
+            action_url = repository.get("html_url", "")
+            
+        else:
+            # Generic webhook event
+            title = f"GitHub Webhook: {event_type}"
+            message = f"Received {event_type} event" + (f" (action: {action})" if action else "")
+            notification_type = NotificationType.INFO
+            action_url = None
+        
+        # Create notification for each active user
+        for user in users:
+            create_notification(
+                db=db,
+                user_id=user.id,
+                notification_type=notification_type,
+                title=title,
+                message=message,
+                action_url=action_url
+            )
+        
+        db.commit()
+        print(f"Created webhook notification for {len(users)} users: {event_type} - {action}")
+        
+    except Exception as e:
+        print(f"Error creating webhook notification: {e}")
+        db.rollback()
 
 
 @router.post("/config", response_model=GitHubConfigResponse, status_code=status.HTTP_201_CREATED)
@@ -288,6 +391,9 @@ async def github_webhook(
         
         # Handle different event types based on headers
         event_type = request.headers.get("X-GitHub-Event")
+        
+        # Create notification for webhook event
+        await notify_webhook_event(db, event_type, action, payload)
         
         if event_type == "pull_request":
             await handle_pull_request_event(payload, db)

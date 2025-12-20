@@ -32,19 +32,6 @@ class Notification(Base):
     project = relationship("Project", back_populates="notifications")
 
 
-class TaskWorkflowHistory(Base):
-    __tablename__ = "task_workflow_history"
-    
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    task_id = Column(String, ForeignKey("tasks.id"), nullable=False)
-    from_stage = Column(String(50))
-    to_stage = Column(String(50))
-    status = Column(String(50))
-    workflow_metadata = Column("workflow_metadata", JSON)  # Column name matches database
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
-    # Relationships
-    task = relationship("Task", back_populates="workflow_history")
 
 
 class AuditLog(Base):
