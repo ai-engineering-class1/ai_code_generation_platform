@@ -153,7 +153,8 @@ class RestrictedShell:
         if "powershell" in shell_path.lower():
             args.extend(["-NoLogo", "-NoProfile"])
             
-        await self.spawn_process(args, working_dir=simplestrepodir)
+        # Use self.cwd instead of arguments
+        await self.spawn_process(args)
 
     async def run(self):
         try:
@@ -215,7 +216,8 @@ class RestrictedShell:
                 # Clear screen to sync PTY (0,0) with Frontend (0,0)
                 await self.send_output("\x1b[2J\x1b[H")
                 # Removed text message to prevent PTY/Frontend coordinate mismatch
-                await self.spawn_full_shell(simplestrepodir)
+                # Use self.cwd directly
+                await self.spawn_full_shell(self.cwd)
 
             while True:
                 raw_data = await self.websocket.receive_text()
@@ -364,7 +366,7 @@ class RestrictedShell:
                 
                 self.proc_obj = self.PtyProcess.spawn(
                     args,
-                    cwd=simplestrepodir,
+                    cwd=self.cwd,
                     dimensions=self.dims,
                     env=env
                 )
