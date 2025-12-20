@@ -8,6 +8,7 @@ import { ArrowLeft, Clock, User, FileText, GitPullRequest, CheckCircle2, AlertCi
 import apiClient from '@/lib/api'
 import { TaskDetail, User as UserType } from '@/types'
 import Dashboard from '@/components/openspec/Dashboard'
+import { Modal } from '@/components/Modal'
 import { OpenSpecProject } from '@/lib/types/openspec'
 
 // Agent Task response interface
@@ -75,6 +76,10 @@ export default function TaskDetailPage({
   const [manualHandleActivityId, setManualHandleActivityId] = useState<string | null>(null)
   const [manualHandleAction, setManualHandleAction] = useState('')
   const [manualHandleResult, setManualHandleResult] = useState('')
+  const [isAssignUserModalOpen, setIsAssignUserModalOpen] = useState(false)
+  const [assignUserActivityId, setAssignUserActivityId] = useState<string | null>(null)
+  const [selectedAssigneeId, setSelectedAssigneeId] = useState('')
+
   const [editFormData, setEditFormData] = useState({
     title: '',
     description: '',
@@ -363,11 +368,13 @@ export default function TaskDetailPage({
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
-                        alert("To be implemented: Agent assignment flow")
+                        setAssignUserActivityId(activity.id)
+                        setSelectedAssigneeId(task?.assigneeId || '')
+                        setIsAssignUserModalOpen(true)
                       }}
                       className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded hover:bg-blue-700 transition"
                     >
-                      Assign Agent
+                      Assign to others
                     </button>
                     <button
                       onClick={(e) => {
@@ -666,6 +673,24 @@ export default function TaskDetailPage({
         },
         onError: (err: any) => {
           alert(`Failed to append aciton: ${err.message}`)
+        }
+      }
+    )
+  }
+
+  const handleAssignUserSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedAssigneeId) return
+
+    updateTaskMutation.mutate(
+      { assignee_id: selectedAssigneeId },
+      {
+        onSuccess: () => {
+          // Optional: Add an activity log entry about the reassignment?
+          // For now, just close the modal. The query invalidation in updateTaskMutation will refresh the UI.
+          setIsAssignUserModalOpen(false)
+          setAssignUserActivityId(null)
+          // alert('Task re-assigned successfully.') // rely on updateTaskMutation's alert
         }
       }
     )
@@ -1358,6 +1383,48 @@ export default function TaskDetailPage({
           </div>
         </div>
       )}
+      {/* Assign User Modal */}
+      <Modal
+        isOpen={isAssignUserModalOpen}
+        onClose={() => setIsAssignUserModalOpen(false)}
+        title="Assign Task to User"
+        size="md"
+      >
+        <form onSubmit={handleAssignUserSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Select User</label>
+            <select
+              value={selectedAssigneeId}
+              onChange={(e) => setSelectedAssigneeId(e.target.value)}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+              required
+            >
+              <option value="">Select a user...</option>
+              {users.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.name || user.email}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex justify-end gap-3 pt-4">
+            <button
+              type="button"
+              onClick={() => setIsAssignUserModalOpen(false)}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!selectedAssigneeId || updateTaskMutation.isPending}
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
+            >
+              {updateTaskMutation.isPending ? 'Assigning...' : 'Assign'}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   )
 }
