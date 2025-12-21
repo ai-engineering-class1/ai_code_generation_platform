@@ -91,10 +91,16 @@ function EditorContent() {
 
     // Initialize
     useEffect(() => {
-        const pId = searchParams.get('projectId') || `draft-${new Date().getTime()}`;
-        const tId = searchParams.get('taskId');
+        const pIdParam = searchParams.get('projectId');
+        const tIdParam = searchParams.get('taskId');
+        const aIdParam = searchParams.get('activityId');
+
+        // Use activityId if provided, otherwise fall back to taskId
+        const effectiveTaskId = aIdParam || tIdParam;
+        const pId = pIdParam || `draft-${new Date().getTime()}`;
+
         setProjectId(pId);
-        setTaskId(tId);
+        setTaskId(effectiveTaskId);
 
         // Define default project structure
         const defaultProject: OpenSpecProject = {
@@ -111,11 +117,11 @@ function EditorContent() {
         setProject(defaultProject);
 
         const fetchData = async () => {
-            if (!pId || pId.startsWith('draft-')) {
-                // Try to load from workspace if taskId exists
-                if (tId) {
+            if (!pIdParam) { // Only proceed if projectId is explicitly in URL, otherwise it's a draft
+                // Try to load from workspace if effectiveTaskId exists for a draft project
+                if (effectiveTaskId) {
                     try {
-                        const initResult = await api.initFromWorkspace(pId, tId);
+                        const initResult = await api.initFromWorkspace(pId, effectiveTaskId);
                         if (initResult.success && initResult.specContent.specTree.length > 0) {
                             setProject(prev => prev ? {
                                 ...prev,
@@ -125,10 +131,10 @@ function EditorContent() {
                             toast.success('Loaded existing workspace');
                         }
                     } catch (e) {
-                        console.log('No existing workspace found');
+                        console.log('No existing workspace found for draft project');
                     }
                 }
-                return;
+                return; // Stop if it's a draft and no workspace loaded
             }
 
             try {
@@ -170,10 +176,10 @@ function EditorContent() {
                 } : undefined);
 
                 // 2. Fetch Tasks (Parallel-ish)
-                if (tId) {
+                if (effectiveTaskId) {
                     // Don't await strictly for the UI update above, but we can await here for sequential logic if needed
                     // Using promise to let it run
-                    apiClient.get(`/projects/${pId}/tasks/${tId}`)
+                    apiClient.get(`/projects/${pId}/tasks/${effectiveTaskId}`)
                         .then(taskRes => {
                             if (taskRes.data) {
                                 setTaskDescription(taskRes.data.description || 'No description available for this task.');

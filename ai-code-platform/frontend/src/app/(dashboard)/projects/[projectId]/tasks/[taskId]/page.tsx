@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import { ArrowLeft, Clock, User, FileText, GitPullRequest, CheckCircle2, AlertCircle, X, Bot, DollarSign, Timer, Zap, Edit } from 'lucide-react'
 import apiClient from '@/lib/api'
-import { TaskDetail, User as UserType } from '@/types'
+import { TaskDetail, User as UserType, WorkflowHistory } from '@/types'
 import Dashboard from '@/components/openspec/Dashboard'
 import { OpenSpecProject } from '@/lib/types/openspec'
 
@@ -56,6 +56,7 @@ export default function TaskDetailPage({
   const queryClient = useQueryClient()
   const [agentTaskId, setAgentTaskId] = useState<string | null>(null)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [downloadingActivityId, setDownloadingActivityId] = useState<string | null>(null)
   const [editFormData, setEditFormData] = useState({
     title: '',
     description: '',
@@ -69,19 +70,19 @@ export default function TaskDetailPage({
   const [activityPage, setActivityPage] = useState(1)
   const [activityPerPage, setActivityPerPage] = useState(5)
 
-  const mockActivities = [
-    { id: 1, date: "2025-12-11 15:30:02", user: "Victor", comment: "analyzed the error log" },
-    { id: 2, date: "2025-12-10 11:20:03", user: "GitHub CI Action", comment: "CI error xxx using a", link: "#", linkLabel: "GitHub link" },
-    { id: 3, date: "2025-12-10 11:20:02", user: "Vicor", comment: "Fixed the issue" },
-    { id: 4, date: "2025-12-09 10:30:02", user: "Tom", comment: "Found an issue xxx with a", link: "#", linkLabel: "Jira link" },
-    // Adding more mock data to demonstrate pagination if needed
-    { id: 5, date: "2025-12-08 14:00:00", user: "Alice", comment: "Checked requirements" },
-    { id: 6, date: "2025-12-08 09:15:00", user: "Bob", comment: "Created initial task" },
-  ]
+  // Fetch real activities from backend
+  const { data: activitiesData = [] } = useQuery<WorkflowHistory[]>({
+    queryKey: ['activities', projectId, taskId],
+    queryFn: async () => {
+      const response = await apiClient.get(`/projects/${projectId}/tasks/${taskId}/activities`)
+      return response.data
+    },
+    enabled: !!projectId && !!taskId,
+  })
 
-  const totalActivityCount = mockActivities.length
+  const totalActivityCount = activitiesData.length
   const totalActivityPages = Math.ceil(totalActivityCount / activityPerPage)
-  const paginatedActivities = mockActivities.slice((activityPage - 1) * activityPerPage, activityPage * activityPerPage)
+  const paginatedActivities = activitiesData.slice((activityPage - 1) * activityPerPage, activityPage * activityPerPage)
 
   const { data: task, isLoading, error } = useQuery<TaskDetail>({
     queryKey: ['task', projectId, taskId],
@@ -258,6 +259,33 @@ export default function TaskDetailPage({
     updateTaskMutation.mutate(updateData)
   }
 
+  // Handle Edit Spec for activity - download codebase and redirect
+  const handleActivityEditSpec = async (activityId: string) => {
+    try {
+      setDownloadingActivityId(activityId)
+
+      // Call backend to download codebase for this activity
+      await apiClient.post(`/openspec/projects/${projectId}/activities/${activityId}/download-codebase`)
+
+      // Redirect to OpenSpec editor with activityId
+      router.push(`/openspec-editor?projectId=${projectId}&activityId=${activityId}`)
+    } catch (error: any) {
+      console.error('Failed to download codebase:', error)
+      alert(`Failed to download codebase: ${error.response?.data?.detail || error.message}`)
+    } finally {
+      setDownloadingActivityId(null)
+    }
+  }
+
+  // Check if an activity is active (in-progress and not completed)
+  const isActiveActivity = (activity: WorkflowHistory) => {
+    // An activity is active if its status is 'in_progress' or similar
+    // and not 'completed'. You can adjust this logic based on your status values.
+    return activity.status &&
+      (activity.status === 'in_progress' || activity.status === 'pending') &&
+      activity.status !== 'completed'
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -327,15 +355,6 @@ export default function TaskDetailPage({
           </span>
         </div>
         <div className="flex items-center gap-2">
-          {!task.specification && (
-            <Link
-              href={`/openspec-editor?projectId=${projectId}&taskId=${taskId}`}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-            >
-              <FileText className="w-4 h-4" />
-              Edit Spec
-            </Link>
-          )}
           <button
             onClick={() => assignToAgentMutation.mutate()}
             disabled={assignToAgentMutation.isPending}
@@ -616,25 +635,64 @@ export default function TaskDetailPage({
                 </div>
               </div>
               <div className="p-6 space-y-4">
-                {paginatedActivities.map((activity) => (
-                  <div key={activity.id} className="block border border-gray-200 rounded-lg p-4 hover:border-blue-500 transition">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-medium text-blue-600 flex items-center gap-2">
-                        <User className="w-3 h-3" />
-                        {activity.user}
-                      </span>
-                      <span className="text-xs text-gray-500">{activity.date}</span>
-                    </div>
-                    <p className="text-gray-700 text-sm">
-                      {activity.comment}
-                      {activity.link && (
-                        <a href={activity.link} className="ml-1 text-blue-500 hover:underline">
-                          {activity.linkLabel}
-                        </a>
-                      )}
-                    </p>
+                {paginatedActivities.length > 0 ? (
+                  paginatedActivities.map((activity) => {
+                    const isActive = isActiveActivity(activity)
+                    const metadata = activity.metadata || {}
+                    const user = metadata.user || 'System'
+                    const comment = metadata.comment || `Transitioned from ${activity.fromStage || 'N/A'} to ${activity.toStage || 'N/A'}`
+
+                    return (
+                      <div key={activity.id} className="block border border-gray-200 rounded-lg p-4 hover:border-blue-500 transition">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-blue-600 flex items-center gap-2">
+                              <User className="w-3 h-3" />
+                              {user}
+                            </span>
+                            {isActive && (
+                              <span className="px-2 py-0.5 text-xs bg-green-100 text-green-800 rounded-full">
+                                Active
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500">
+                              {new Date(activity.createdAt).toLocaleString()}
+                            </span>
+                            {isActive && (
+                              <button
+                                onClick={() => handleActivityEditSpec(activity.id)}
+                                disabled={downloadingActivityId === activity.id}
+                                className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                <FileText className="w-3 h-3" />
+                                {downloadingActivityId === activity.id ? 'Downloading...' : 'Edit Spec'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <p className="text-gray-700 text-sm">
+                          {comment}
+                          {metadata.link && (
+                            <a href={metadata.link} className="ml-1 text-blue-500 hover:underline">
+                              {metadata.linkLabel || 'Link'}
+                            </a>
+                          )}
+                        </p>
+                        {activity.status && (
+                          <div className="mt-2 text-xs text-gray-500">
+                            Status: <span className="font-medium">{activity.status}</span>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    No activities found for this task.
                   </div>
-                ))}
+                )}
               </div>
               {/* Pagination Footer */}
               {totalActivityPages > 1 && (

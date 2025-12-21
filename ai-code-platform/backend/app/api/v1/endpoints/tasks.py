@@ -9,7 +9,8 @@ from app.models.task import Task
 from app.models.workflow import Specification
 from app.schemas.task import (
     TaskCreate, TaskUpdate, TaskResponse, 
-    TaskDetailResponse, SpecificationCreate, SpecificationResponse
+    TaskDetailResponse, SpecificationCreate, SpecificationResponse,
+    WorkflowHistoryResponse
 )
 from app.services.claude_service import ClaudeService
 from app.services.notification_service import notify_task_assigned
@@ -151,6 +152,53 @@ async def get_task(
         task.workflow_history = []
     
     return task
+
+
+@router.get("/{project_id}/tasks/{task_id}/activities", response_model=List[WorkflowHistoryResponse])
+async def get_task_activities(
+    project_id: str,
+    task_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get all activities (workflow history) for a task"""
+    # Verify project ownership
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.owner_id == current_user.id
+    ).first()
+    
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
+    
+    # Verify task exists and belongs to project
+    task = db.query(Task).filter(
+        Task.id == task_id,
+        Task.project_id == project_id
+    ).first()
+    
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found"
+        )
+    
+    from app.models.notification import TaskWorkflowHistory
+    
+    # Fetch workflow history ordered by created_at DESC (newest first)
+    try:
+        activities = db.query(TaskWorkflowHistory).filter(
+            TaskWorkflowHistory.task_id == task_id
+        ).order_by(TaskWorkflowHistory.created_at.desc()).all()
+        
+        return activities
+    except Exception as e:
+        print(f"Error fetching activities: {e}")
+        # Return empty list if query fails
+        return []
 
 
 @router.put("/{project_id}/tasks/{task_id}", response_model=TaskResponse)
