@@ -172,4 +172,6 @@ class TaskDetailResponse(TaskResponse):
     specification: Optional[SpecificationResponse] = None
     code_generation: Optional[CodeGenerationResponse] = Field(None, alias="codeGeneration")
     workflow_history: List[WorkflowHistoryResponse] = Field([], alias="workflowHistory")
+    latest_activity_status: Optional[str] = Field(None, alias="latestActivityStatus")
+    latest_activity_role: Optional[str] = Field(None, alias="latestActivityRole")
 
