@@ -81,8 +81,23 @@ export default function TaskDetailPage({
   })
 
   const totalActivityCount = activitiesData.length
-  const totalActivityPages = Math.ceil(totalActivityCount / activityPerPage)
-  const paginatedActivities = activitiesData.slice((activityPage - 1) * activityPerPage, activityPage * activityPerPage)
+
+  // Sort activities by createdAt desc
+  const sortedActivities = [...activitiesData].sort((a, b) =>
+    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  )
+
+  // Find active activity
+  const activeActivity = sortedActivities.find(activity =>
+    activity.status &&
+    (activity.status === 'in_progress' || activity.status === 'pending')
+  )
+
+  // Filter out active activity from the list to show in history
+  const historyActivities = sortedActivities.filter(activity => activity.id !== activeActivity?.id)
+
+  const totalActivityPages = Math.ceil(historyActivities.length / activityPerPage)
+  const paginatedActivities = historyActivities.slice((activityPage - 1) * activityPerPage, activityPage * activityPerPage)
 
   const { data: task, isLoading, error } = useQuery<TaskDetail>({
     queryKey: ['task', projectId, taskId],
@@ -282,8 +297,7 @@ export default function TaskDetailPage({
     // An activity is active if its status is 'in_progress' or similar
     // and not 'completed'. You can adjust this logic based on your status values.
     return activity.status &&
-      (activity.status === 'in_progress' || activity.status === 'pending') &&
-      activity.status !== 'completed'
+      (activity.status === 'in_progress' || activity.status === 'pending')
   }
 
   if (isLoading) {
@@ -613,7 +627,71 @@ export default function TaskDetailPage({
               </div>
             )}
 
-            {/* Mock Activity Log */}
+            {/* Active Activity Display */}
+            {activeActivity && (
+              <div className="bg-white rounded-lg shadow mt-6 border-l-4 border-blue-500">
+                <div className="px-6 py-4 border-b border-gray-200">
+                  <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                    <Zap className="h-5 w-5 text-blue-500" />
+                    Active Activity
+                  </h2>
+                </div>
+                <div className="p-6">
+                  {(() => {
+                    const activity = activeActivity
+                    const isActive = true // It is active
+                    const metadata = activity.metadata || (activity as any).workflow_metadata || {}
+                    const user = metadata.user || 'System'
+                    const comment = metadata.comment || `Transitioned from ${activity.fromStage || 'N/A'} to ${activity.toStage || 'N/A'}`
+
+                    return (
+                      <div key={activity.id} className="block border border-blue-200 bg-blue-50 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-blue-700 flex items-center gap-2">
+                              <User className="w-4 h-4" />
+                              {user}
+                            </span>
+                            <span className="text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full uppercase font-bold tracking-wide">
+                              In Progress
+                            </span>
+                          </div>
+                          <span className="text-xs text-blue-500 flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {new Date(activity.createdAt).toLocaleString()}
+                          </span>
+                        </div>
+
+                        <p className="text-gray-800 text-sm mb-3 font-medium">
+                          {comment}
+                        </p>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleActivityEditSpec(activity.id)}
+                            disabled={downloadingActivityId === activity.id}
+                            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition disabled:opacity-70 disabled:cursor-not-allowed shadow-sm"
+                          >
+                            {downloadingActivityId === activity.id ? (
+                              <>
+                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                Please wait...
+                              </>
+                            ) : (
+                              <>
+                                <Edit className="w-4 h-4" />
+                                Edit Spec
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })()}
+                </div>
+              </div>
+            )}
+
             {/* Activity Log */}
             <div className="bg-white rounded-lg shadow mt-6">
               <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
@@ -638,7 +716,7 @@ export default function TaskDetailPage({
                 {paginatedActivities.length > 0 ? (
                   paginatedActivities.map((activity) => {
                     const isActive = isActiveActivity(activity)
-                    const metadata = activity.metadata || {}
+                    const metadata = activity.metadata || (activity as any).workflow_metadata || {}
                     const user = metadata.user || 'System'
                     const comment = metadata.comment || `Transitioned from ${activity.fromStage || 'N/A'} to ${activity.toStage || 'N/A'}`
 
