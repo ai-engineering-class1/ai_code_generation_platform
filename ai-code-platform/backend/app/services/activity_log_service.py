@@ -214,3 +214,23 @@ class ActivityLogService:
             TaskWorkflowHistory.task_id == task_id,
             TaskWorkflowHistory.activity_end_at.isnot(None)
         ).order_by(desc(TaskWorkflowHistory.activity_end_at)).limit(limit).all()
+
+    def get_latest_activity_info(self, db: Session, task_id: str) -> Dict[str, Any]:
+        """
+        Get status and task_role from the latest activity for a task.
+        Sorts by activity_start_at DESC.
+        """
+        latest_activity = db.query(TaskWorkflowHistory).filter(
+            TaskWorkflowHistory.task_id == task_id
+        ).order_by(desc(TaskWorkflowHistory.activity_start_at)).first()
+
+        if latest_activity:
+            return {
+                "status": latest_activity.status,
+                "task_role": latest_activity.task_role
+            }
+        
+        return {
+            "status": None,
+            "task_role": None
+        }

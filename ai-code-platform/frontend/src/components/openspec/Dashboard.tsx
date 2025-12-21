@@ -103,6 +103,24 @@ export default function Dashboard({
                                 </div>
                                 <div>
                                     <label className="block text-xs font-medium text-blue-600 mb-1">
+                                        Activity Status
+                                    </label>
+                                    <p className="text-sm text-gray-900 capitalize font-sans">
+                                        {task.latestActivityStatus ? task.latestActivityStatus.replace(/_/g, ' ') : 'N/A'}
+                                    </p>
+                                </div>
+                                {task.latestActivityRole && (
+                                    <div>
+                                        <label className="block text-xs font-medium text-blue-600 mb-1">
+                                            Task Role
+                                        </label>
+                                        <p className="text-sm text-gray-900 font-sans">
+                                            {task.latestActivityRole}
+                                        </p>
+                                    </div>
+                                )}
+                                <div>
+                                    <label className="block text-xs font-medium text-blue-600 mb-1">
                                         Assignee
                                     </label>
                                     <p className="text-sm text-gray-900 font-sans">
@@ -121,7 +139,8 @@ export default function Dashboard({
                         )}
                     </div>
                 </div>
-            )}
+            )
+            }
 
             {/* Project Section */}
             <div className="border-b border-gray-200">
@@ -178,32 +197,34 @@ export default function Dashboard({
             </div>
 
             {/* Collaboration */}
-            {showCollaboration && (
-                <div className="border-b border-gray-200">
-                    <div className="px-4 py-2 bg-gray-50 border-b border-gray-200">
-                        <h4 className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                            <Users className="w-3 h-3" />
-                            Collaboration
-                        </h4>
-                    </div>
+            {
+                showCollaboration && (
+                    <div className="border-b border-gray-200">
+                        <div className="px-4 py-2 bg-gray-50 border-b border-gray-200">
+                            <h4 className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                <Users className="w-3 h-3" />
+                                Collaboration
+                            </h4>
+                        </div>
 
-                    <div className="p-4 space-y-3">
-                        <div className="flex items-center gap-2">
-                            <img
-                                src={`https://ui-avatars.com/api/?name=${project?.owner || 'User'}&background=405189&color=fff`}
-                                alt="User"
-                                className="w-6 h-6 rounded-full"
-                            />
-                            <div className="flex-1">
-                                <span className="block text-xs font-medium text-gray-800">
-                                    {project?.owner || 'Current User'}
-                                </span>
-                                <span className="block text-[10px] text-gray-500">Owner</span>
+                        <div className="p-4 space-y-3">
+                            <div className="flex items-center gap-2">
+                                <img
+                                    src={`https://ui-avatars.com/api/?name=${project?.owner || 'User'}&background=405189&color=fff`}
+                                    alt="User"
+                                    className="w-6 h-6 rounded-full"
+                                />
+                                <div className="flex-1">
+                                    <span className="block text-xs font-medium text-gray-800">
+                                        {project?.owner || 'Current User'}
+                                    </span>
+                                    <span className="block text-[10px] text-gray-500">Owner</span>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {children}
 

@@ -54,6 +54,8 @@ export interface Task {
     status: TaskStatus | string; // Allow string as well since backend might return simple status string
     createdAt: string;
     updatedAt: string;
+    latestActivityStatus?: string;
+    latestActivityRole?: string;
 }
 
 export type TabType = 'specification' | 'preview' | 'suggestions' | 'terminal';

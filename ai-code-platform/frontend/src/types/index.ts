@@ -139,6 +139,8 @@ export interface TaskDetail extends Task {
   specification?: Specification
   codeGeneration?: CodeGeneration
   workflowHistory: WorkflowHistory[]
+  latestActivityStatus?: string
+  latestActivityRole?: string
 }
 
 export interface PipelineExecution {

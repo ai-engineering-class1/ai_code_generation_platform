@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Text, ForeignKey, DateTime, Enum, JSON, Boolean
+from sqlalchemy import Column, String, Text, ForeignKey, DateTime, Enum, JSON, Boolean, text
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy import Index
 from sqlalchemy.orm import relationship
@@ -121,7 +121,8 @@ class TaskWorkflowHistory(Base):
     task = relationship("Task", back_populates="workflow_history")
 
     __table_args__ = (
-        Index('ix_task_workflow_history_activity_end_at', 'activity_end_at'),
+        Index('ix_task_hist_task_start', 'task_id', text("activity_start_at DESC")),
+        Index('ix_task_hist_task_end', 'task_id', text("activity_end_at DESC")),
         Index('ix_task_workflow_history_search_vector', 'search_vector', postgresql_using='gin'),
     )
 
