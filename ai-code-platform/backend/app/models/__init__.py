@@ -3,8 +3,8 @@
 
 from app.models.user import User, UserRole
 from app.models.project import Project, ProjectStatus
-from app.models.task import Task, TaskType, TaskPriority, TaskStatus, TaskStage
-from app.models.notification import Notification, NotificationType, TaskWorkflowHistory, AuditLog
+from app.models.task import Task, TaskType, TaskPriority, TaskStatus, TaskStage, TaskWorkflowHistory
+from app.models.notification import Notification, NotificationType, AuditLog
 from app.models.integration import JiraConfiguration, GitHubConfiguration
 from app.models.workflow import Specification, CodeGeneration, CodeGenerationStatus, PipelineExecution, PipelineType, PipelineStatus
 
