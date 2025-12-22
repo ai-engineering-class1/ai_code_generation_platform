@@ -151,6 +151,12 @@ async def get_task(
         print(f"Warning: Could not load workflow history: {e}")
         # Set to empty list if query fails
         task.workflow_history = []
+
+    # Get latest activity info
+    activity_service = ActivityLogService()
+    latest_activity_info = activity_service.get_latest_activity_info(db, task_id)
+    task.latest_activity_status = latest_activity_info["status"]
+    task.latest_activity_role = latest_activity_info["task_role"]
     
     return task
 
