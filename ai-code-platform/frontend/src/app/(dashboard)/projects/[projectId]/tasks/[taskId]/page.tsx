@@ -269,8 +269,25 @@ export default function TaskDetailPage({
             </div>
           </div>
 
-          {/* Right: Date & Expand */}
-          <div className="flex items-center justify-end gap-3 w-1/4 min-w-[150px]">
+          {/* Right: Actions, Date & Expand */}
+          <div className="flex items-center justify-end gap-3 w-1/4 min-w-[200px]">
+            {isActiveSection && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleActivityEditSpec(activity.id)
+                }}
+                disabled={downloadingActivityId === activity.id}
+                className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700 transition disabled:opacity-50 shadow-sm"
+              >
+                {downloadingActivityId === activity.id ? (
+                  <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Edit className="w-3 h-3" />
+                )}
+                <span>Edit Spec</span>
+              </button>
+            )}
             <span className="text-xs text-gray-500 whitespace-nowrap">
               {formatDate(activity.createdAt)}
             </span>
@@ -371,31 +388,55 @@ export default function TaskDetailPage({
                 )}
 
                 {/* Active Activity Actions */}
-                {isActiveSection && activity.status === 'pending_user_input' && (
+                {isActiveSection && (
                   <div className="mt-4 pt-3 border-t border-blue-100 flex gap-3">
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
-                        setAssignUserActivityId(activity.id)
-                        setSelectedAssigneeId(task?.assigneeId || '')
-                        setIsAssignUserModalOpen(true)
+                        handleActivityEditSpec(activity.id)
                       }}
-                      className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+                      disabled={downloadingActivityId === activity.id}
+                      className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded hover:bg-blue-700 transition flex items-center gap-2 shadow-sm"
                     >
-                      Assign to others
+                      {downloadingActivityId === activity.id ? (
+                        <>
+                          <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          Downloading...
+                        </>
+                      ) : (
+                        <>
+                          <Edit className="w-3 h-3" />
+                          Edit Spec
+                        </>
+                      )}
                     </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setManualHandleActivityId(activity.id)
-                        setManualHandleAction('')
-                        setManualHandleResult('')
-                        setIsManualHandleModalOpen(true)
-                      }}
-                      className="px-3 py-1.5 text-xs font-medium bg-white text-gray-700 border border-gray-300 rounded hover:bg-gray-50 transition"
-                    >
-                      Manually Handled
-                    </button>
+                    {activity.status === 'pending_user_input' && (
+                      <>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setAssignUserActivityId(activity.id)
+                            setSelectedAssigneeId(task?.assigneeId || '')
+                            setIsAssignUserModalOpen(true)
+                          }}
+                          className="px-3 py-1.5 text-xs font-medium bg-gray-600 text-white rounded hover:bg-gray-700 transition"
+                        >
+                          Assign to others
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setManualHandleActivityId(activity.id)
+                            setManualHandleAction('')
+                            setManualHandleResult('')
+                            setIsManualHandleModalOpen(true)
+                          }}
+                          className="px-3 py-1.5 text-xs font-medium bg-white text-gray-700 border border-gray-300 rounded hover:bg-gray-50 transition"
+                        >
+                          Manually Handled
+                        </button>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -582,13 +623,13 @@ export default function TaskDetailPage({
   // Split into Active (in_progress) and Past (log)
   // Fix: Exclude "dead" activities that might have an end time but stuck status (from previous bugs)
   const activeActivities = sortedActivities.filter(a =>
-    (a.status === 'in_progress' || a.status === 'running' || a.status === 'pending_user_input') && !a.activityEndAt
+    (a.status === 'in_progress' || a.status === 'running' || a.status === 'pending_user_input' || a.status === 'pending') && !a.activityEndAt
   )
 
   // Filter Past Activities based on Search Criteria
   const filteredPastActivities = sortedActivities.filter(a => {
     // 1. Exclude active
-    if (a.status === 'in_progress' || a.status === 'running' || a.status === 'pending_user_input') return false
+    if (a.status === 'in_progress' || a.status === 'running' || a.status === 'pending_user_input' || a.status === 'pending') return false
 
     // 2. Query (Full Text) - checks title, action, result, situation, operatorId
     if (searchFilters.query) {
@@ -863,13 +904,6 @@ export default function TaskDetailPage({
                         Approve Specification
                       </button>
                     )}
-                    <Link
-                      href={`/openspec-editor?projectId=${projectId}&taskId=${taskId}`}
-                      className="px-3 py-1.5 bg-gray-100 text-gray-700 text-xs font-medium rounded-md hover:bg-gray-200 transition flex items-center"
-                    >
-                      <FileText className="h-3 w-3 mr-1" />
-                      Edit Specification
-                    </Link>
                   </div>
                 </div>
                 <div className="prose max-w-none">
