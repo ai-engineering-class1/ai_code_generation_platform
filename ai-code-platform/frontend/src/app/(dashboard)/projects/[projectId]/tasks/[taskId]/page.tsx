@@ -74,6 +74,33 @@ export default function TaskDetailPage({
   const [activityPage, setActivityPage] = useState(1)
   const [activityPerPage, setActivityPerPage] = useState(5)
 
+  const [searchFilters, setSearchFilters] = useState({
+    query: '',
+    status: '',
+    type: '',
+    fromStage: '',
+    toStage: '',
+    isPublic: 'all',
+    startDate: '',
+    endDate: '',
+  })
+
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [expandedActivityIds, setExpandedActivityIds] = useState<Set<string>>(new Set())
+
+  // Manual Handle Modal State
+  const [isManualHandleModalOpen, setIsManualHandleModalOpen] = useState(false)
+  const [manualHandleActivityId, setManualHandleActivityId] = useState<string | null>(null)
+  const [manualHandleAction, setManualHandleAction] = useState('')
+  const [manualHandleResult, setManualHandleResult] = useState('')
+
+  // Assign User Modal State
+  const [isAssignUserModalOpen, setIsAssignUserModalOpen] = useState(false)
+  const [assignUserActivityId, setAssignUserActivityId] = useState<string | null>(null)
+  const [selectedAssigneeId, setSelectedAssigneeId] = useState<string | null>(null)
+
+  // Download Codebase State
+  const [downloadingActivityId, setDownloadingActivityId] = useState<string | null>(null)
 
 
   const { data: task, isLoading, error } = useQuery<TaskDetail>({
@@ -1392,7 +1419,7 @@ export default function TaskDetailPage({
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Select User</label>
             <select
-              value={selectedAssigneeId}
+              value={selectedAssigneeId || ''}
               onChange={(e) => setSelectedAssigneeId(e.target.value)}
               className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
               required
