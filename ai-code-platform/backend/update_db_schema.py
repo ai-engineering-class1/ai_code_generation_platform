@@ -112,15 +112,36 @@ def update_schema():
             
             # Create Indices
             print("\nChecking indices...")
-            # activity_end_at index
+            
+            # 1. Drop old activity_end_at index if exists (replaced by composite)
             try:
                 conn.execute(text("""
-                    CREATE INDEX IF NOT EXISTS ix_task_workflow_history_activity_end_at 
-                    ON task_workflow_history (activity_end_at)
+                    DROP INDEX IF EXISTS ix_task_workflow_history_activity_end_at
                 """))
-                print("✓ ix_task_workflow_history_activity_end_at ensured")
+                print("✓ Old index ix_task_workflow_history_activity_end_at dropped (if existed)")
             except Exception as e:
-                print(f"Error creating index on activity_end_at: {e}")
+                print(f"Error dropping old index: {e}")
+
+            # 2. Create new Composite Indices
+            # ix_task_hist_task_start
+            try:
+                conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS ix_task_hist_task_start 
+                    ON task_workflow_history (task_id, activity_start_at DESC)
+                """))
+                print("✓ ix_task_hist_task_start ensured")
+            except Exception as e:
+                print(f"Error creating index ix_task_hist_task_start: {e}")
+
+            # ix_task_hist_task_end
+            try:
+                conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS ix_task_hist_task_end 
+                    ON task_workflow_history (task_id, activity_end_at DESC)
+                """))
+                print("✓ ix_task_hist_task_end ensured")
+            except Exception as e:
+                print(f"Error creating index ix_task_hist_task_end: {e}")
 
             # GIN index for search_vector
             try:
