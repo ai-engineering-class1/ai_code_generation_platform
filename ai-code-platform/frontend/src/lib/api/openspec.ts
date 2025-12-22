@@ -5,7 +5,7 @@ export const uploadOpenSpec = async (projectId: string, file: File, taskId?: str
     const formData = new FormData();
     formData.append('openspecFile', file);
 
-    const url = taskId 
+    const url = taskId
         ? `/openspec/projects/${projectId}/upload?taskId=${taskId}`
         : `/openspec/projects/${projectId}/upload`;
 
