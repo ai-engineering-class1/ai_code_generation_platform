@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import { ArrowLeft, Clock, User, FileText, GitPullRequest, CheckCircle2, AlertCircle, X, Bot, DollarSign, Timer, Zap, Edit, ChevronDown, ChevronUp, Search, Filter, Calendar, Database } from 'lucide-react'
 import apiClient from '@/lib/api'
-import { TaskDetail, User as UserType } from '@/types'
+import { TaskDetail, User as UserType, WorkflowHistory } from '@/types'
 import Dashboard from '@/components/openspec/Dashboard'
 import { Modal } from '@/components/Modal'
 import { OpenSpecProject } from '@/lib/types/openspec'
@@ -60,25 +60,6 @@ export default function TaskDetailPage({
   const [currentActivityId, setCurrentActivityId] = useState<string | null>(null)
   const [lastSyncedStatus, setLastSyncedStatus] = useState<string | null>(null)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
-  const [expandedActivityIds, setExpandedActivityIds] = useState<Set<string>>(new Set())
-  const [isSearchOpen, setIsSearchOpen] = useState(false)
-  const [searchFilters, setSearchFilters] = useState({
-    query: '',
-    status: '',
-    type: '',
-    fromStage: '',
-    toStage: '',
-    isPublic: '', // 'all', 'public', 'private'
-    startDate: '', // 'YYYY-MM-DDTHH:mm'
-    endDate: '',
-  })
-  const [isManualHandleModalOpen, setIsManualHandleModalOpen] = useState(false)
-  const [manualHandleActivityId, setManualHandleActivityId] = useState<string | null>(null)
-  const [manualHandleAction, setManualHandleAction] = useState('')
-  const [manualHandleResult, setManualHandleResult] = useState('')
-  const [isAssignUserModalOpen, setIsAssignUserModalOpen] = useState(false)
-  const [assignUserActivityId, setAssignUserActivityId] = useState<string | null>(null)
-  const [selectedAssigneeId, setSelectedAssigneeId] = useState('')
 
   const [editFormData, setEditFormData] = useState({
     title: '',
@@ -696,6 +677,32 @@ export default function TaskDetailPage({
     )
   }
 
+  // Handle Edit Spec for activity - download codebase and redirect
+  const handleActivityEditSpec = async (activityId: string) => {
+    try {
+      setDownloadingActivityId(activityId)
+
+      // Call backend to download codebase for this activity
+      await apiClient.post(`/openspec/projects/${projectId}/activities/${activityId}/download-codebase`)
+
+      // Redirect to OpenSpec editor with activityId
+      router.push(`/openspec-editor?projectId=${projectId}&activityId=${activityId}`)
+    } catch (error: any) {
+      console.error('Failed to download codebase:', error)
+      alert(`Failed to download codebase: ${error.response?.data?.detail || error.message}`)
+    } finally {
+      setDownloadingActivityId(null)
+    }
+  }
+
+  // Check if an activity is active (in-progress and not completed)
+  const isActiveActivity = (activity: WorkflowHistory) => {
+    // An activity is active if its status is 'in_progress' or similar
+    // and not 'completed'. You can adjust this logic based on your status values.
+    return activity.status &&
+      (activity.status === 'in_progress' || activity.status === 'pending')
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -775,15 +782,6 @@ export default function TaskDetailPage({
           </span>
         </div>
         <div className="flex items-center gap-2">
-          {!task.specification && (
-            <Link
-              href={`/openspec-editor?projectId=${projectId}&taskId=${taskId}`}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-            >
-              <FileText className="w-4 h-4" />
-              Edit Spec
-            </Link>
-          )}
           <button
             onClick={() => assignToAgentMutation.mutate()}
             disabled={assignToAgentMutation.isPending}

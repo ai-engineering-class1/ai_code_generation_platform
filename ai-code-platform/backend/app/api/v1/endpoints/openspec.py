@@ -109,6 +109,35 @@ async def ensure_repo_downloaded(task_id: str) -> bool:
         traceback.print_exc()
         return False
 
+@router.post("/projects/{project_id}/activities/{activity_id}/download-codebase")
+async def download_codebase_for_activity(project_id: str, activity_id: str):
+    """
+    Download GitHub codebase for a specific activity.
+    This triggers the repository download and stores it under temp/{activity_id}/codebase/simplest-repo/
+    """
+    try:
+        # Download repository using activity_id instead of task_id
+        success = await ensure_repo_downloaded(activity_id)
+        
+        if success:
+            return {
+                "success": True,
+                "message": f"Codebase downloaded successfully for activity {activity_id}",
+                "activityId": activity_id
+            }
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to download codebase. Check server logs for details."
+            )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error downloading codebase: {str(e)}"
+        )
+
 # Helper for GitHub Logic using GitHub Service Proxy
 # Based on: https://github.com/lee-liao/claude-code-process/blob/main/src/github-service.ts
 class SimpleGitHubClient:
