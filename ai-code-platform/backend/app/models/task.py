@@ -3,6 +3,7 @@ from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy import Index
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+from typing import Dict, Set
 import uuid
 import enum
 from app.core.database import Base
@@ -22,6 +23,27 @@ class TaskStatus(str, enum.Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+
+
+ALLOWED: Dict[TaskStatus, Set[TaskStatus]] = {
+    TaskStatus.IN_PROGRESS: {TaskStatus.BLOCKED, TaskStatus.COMPLETED, TaskStatus.FAILED},
+    TaskStatus.PENDING: {TaskStatus.IN_PROGRESS, TaskStatus.CANCELLED},
+    TaskStatus.BLOCKED: {TaskStatus.IN_PROGRESS, TaskStatus.CANCELLED},
+    TaskStatus.COMPLETED: set(),
+    TaskStatus.FAILED: set(),
+    TaskStatus.CANCELLED: set(),
+}
+
+def can_transition(src: TaskStatus, dst: TaskStatus) -> bool:
+    return dst in ALLOWED.get(src, set())
+
+def transition(current: TaskStatus, dst: TaskStatus) -> TaskStatus:
+    if can_transition(current, dst):
+        return dst
+    # Allow self-transition (updating other fields but keeping status same)
+    if current == dst:
+        return dst
+    raise ValueError(f"invalid transition {current} -> {dst}")
 
 
 class TaskStage(str, enum.Enum):
@@ -53,6 +75,25 @@ class ActivityStatus(str, enum.Enum):
     FAILED = "failed"
 
 
+ACTIVITY_ALLOWED: Dict[ActivityStatus, Set[ActivityStatus]] = {
+    ActivityStatus.IN_PROGRESS: {ActivityStatus.PENDING_USER_INPUT, ActivityStatus.COMPLETED, ActivityStatus.FAILED},
+    ActivityStatus.PENDING_USER_INPUT: {ActivityStatus.IN_PROGRESS, ActivityStatus.COMPLETED, ActivityStatus.FAILED},
+    ActivityStatus.COMPLETED: set(),
+    ActivityStatus.FAILED: set(),
+}
+
+def can_activity_transition(src: ActivityStatus, dst: ActivityStatus) -> bool:
+    return dst in ACTIVITY_ALLOWED.get(src, set())
+
+def transition_activity(current: ActivityStatus, dst: ActivityStatus) -> ActivityStatus:
+    if can_activity_transition(current, dst):
+        return dst
+    # Allow self-transition
+    if current == dst:
+        return dst
+    raise ValueError(f"invalid activity transition {current} -> {dst}")
+
+
 class Task(Base):
     __tablename__ = "tasks"
     
@@ -75,6 +116,31 @@ class Task(Base):
     specifications = relationship("Specification", back_populates="task")  # One-to-many: task can have multiple spec versions
     code_generations = relationship("CodeGeneration", back_populates="task")  # One-to-many: task can have multiple code generations
     workflow_history = relationship("TaskWorkflowHistory", back_populates="task")
+
+    @property
+    def allowed_transitions(self) -> list[str]:
+        """
+        Returns list of allowed status values to transition to from current status.
+        Always includes the current status.
+        """
+        # Ensure we have the enum value
+        current = self.status
+        # If it's a string, try to convert to Enum
+        if isinstance(current, str):
+            try:
+                current = TaskStatus(current)
+            except ValueError:
+                # If invalid status in DB, allow all or none? 
+                # Let's return just current string to be safe
+                return [self.status]
+        
+        allowed_set = ALLOWED.get(current, set())
+        # Convert enums to strings
+        result = [s.value for s in allowed_set]
+        # Include current status
+        if current.value not in result:
+            result.append(current.value)
+        return result
 
 
 class TaskWorkflowHistory(Base):
@@ -125,4 +191,27 @@ class TaskWorkflowHistory(Base):
         Index('ix_task_hist_task_end', 'task_id', text("activity_end_at DESC")),
         Index('ix_task_workflow_history_search_vector', 'search_vector', postgresql_using='gin'),
     )
+
+    @property
+    def allowed_transitions(self) -> list[str]:
+        """
+        Returns list of allowed status values to transition to from current status.
+        Always includes the current status.
+        """
+        # Ensure we have the enum value
+        current = self.status
+        # If it's a string, try to convert to Enum
+        if isinstance(current, str):
+            try:
+                current = ActivityStatus(current)
+            except ValueError:
+                return [self.status]
+        
+        allowed_set = ACTIVITY_ALLOWED.get(current, set())
+        # Convert enums to strings
+        result = [s.value for s in allowed_set]
+        # Include current status
+        if current.value not in result:
+            result.append(current.value)
+        return result
 

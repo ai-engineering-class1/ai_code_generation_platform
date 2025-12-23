@@ -271,23 +271,7 @@ export default function TaskDetailPage({
 
           {/* Right: Actions, Date & Expand */}
           <div className="flex items-center justify-end gap-3 w-1/4 min-w-[200px]">
-            {isActiveSection && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  handleActivityEditSpec(activity.id)
-                }}
-                disabled={downloadingActivityId === activity.id}
-                className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700 transition disabled:opacity-50 shadow-sm"
-              >
-                {downloadingActivityId === activity.id ? (
-                  <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <Edit className="w-3 h-3" />
-                )}
-                <span>Edit Spec</span>
-              </button>
-            )}
+
             <span className="text-xs text-gray-500 whitespace-nowrap">
               {formatDate(activity.createdAt)}
             </span>
@@ -422,6 +406,28 @@ export default function TaskDetailPage({
                           className="px-3 py-1.5 text-xs font-medium bg-gray-600 text-white rounded hover:bg-gray-700 transition"
                         >
                           Assign to others
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            // Check if task status allows agent assignment
+                            if (!task?.status || task.status === 'completed' || task.status === 'failed') {
+                              alert('Cannot assign agent to completed/failed task.');
+                              return;
+                            }
+                            if (window.confirm('Are you sure you want to assign this task to an AI Agent?')) {
+                              assignToAgentMutation.mutate();
+                            }
+                          }}
+                          className="px-3 py-1.5 text-xs font-medium bg-purple-600 text-white rounded hover:bg-purple-700 transition flex items-center gap-2"
+                          disabled={assignToAgentMutation.isPending}
+                        >
+                          {assignToAgentMutation.isPending ? (
+                            <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <Bot className="w-3 h-3" />
+                          )}
+                          Assign to Agent
                         </button>
                         <button
                           onClick={(e) => {
@@ -850,14 +856,7 @@ export default function TaskDetailPage({
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => assignToAgentMutation.mutate()}
-            disabled={assignToAgentMutation.isPending}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Bot className="w-4 h-4" />
-            {assignToAgentMutation.isPending ? 'Assigning...' : 'Assign Agent'}
-          </button>
+
           {task.specification && task.specification.approved && !task.codeGeneration && (
             <button
               className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
@@ -1200,6 +1199,7 @@ export default function TaskDetailPage({
           } as OpenSpecProject : undefined}
           task={{ ...task, description: undefined } as any}
           taskDescription={undefined}
+          users={users}
           onProjectChange={() => { }}
           onGenerateCode={() => { }}
           onOpenTerminal={() => { }}
@@ -1269,12 +1269,30 @@ export default function TaskDetailPage({
                           onChange={(e) => setEditFormData({ ...editFormData, status: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                         >
-                          <option value="pending">Pending</option>
-                          <option value="in_progress">In Progress</option>
-                          <option value="blocked">Blocked</option>
-                          <option value="completed">Completed</option>
-                          <option value="failed">Failed</option>
-                          <option value="cancelled">Cancelled</option>
+                          {(() => {
+                            const options = [
+                              { value: 'pending', label: 'Pending' },
+                              { value: 'in_progress', label: 'In Progress' },
+                              { value: 'blocked', label: 'Blocked' },
+                              { value: 'completed', label: 'Completed' },
+                              { value: 'failed', label: 'Failed' },
+                              { value: 'cancelled', label: 'Cancelled' }
+                            ]
+
+                            // Get allowed target statuses based on backend response
+                            // But also always include the *current* status so it is selectable/visible
+                            const currentStatus = task.status || 'pending'
+                            const allowed = new Set(task.allowed_transitions || [])
+                            allowed.add(currentStatus)
+
+                            return options
+                              .filter(opt => allowed.has(opt.value))
+                              .map(opt => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </option>
+                              ))
+                          })()}
                         </select>
                       </div>
 
@@ -1320,11 +1338,12 @@ export default function TaskDetailPage({
                         <select
                           id="edit-assignee"
                           value={editFormData.assigneeId || ''}
+                          disabled={!!task.assigneeId}
                           onChange={(e) => {
                             console.log('Assignee changed to:', e.target.value)
                             setEditFormData({ ...editFormData, assigneeId: e.target.value })
                           }}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                          className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 ${task.assigneeId ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                         >
                           <option value="">Unassigned</option>
                           {users.map((user) => (

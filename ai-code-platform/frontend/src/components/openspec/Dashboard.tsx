@@ -13,11 +13,13 @@ import {
     FileText
 } from 'lucide-react';
 import { OpenSpecProject, Task } from '@/lib/types/openspec';
+import { User } from '@/types';
 
 interface DashboardProps {
     project?: OpenSpecProject;
     task?: Task;
     taskDescription?: string; // Keep for fallback or easier passing if full task obj not available
+    users?: User[]; // Added users prop
     onProjectChange: (field: string, value: string | boolean) => void;
     onGenerateCode: () => void;
     onOpenTerminal: () => void;
@@ -32,6 +34,7 @@ export default function Dashboard({
     project,
     task,
     taskDescription,
+    users = [], // Default to empty array
     onProjectChange,
     onGenerateCode,
     onOpenTerminal,
@@ -49,6 +52,13 @@ export default function Dashboard({
     };
 
     const description = task?.description || taskDescription;
+
+    // Helper to get assignee name
+    const getAssigneeName = (assigneeId?: string) => {
+        if (!assigneeId) return 'Unassigned';
+        const user = users.find(u => u.id === assigneeId);
+        return user ? user.name : assigneeId;
+    };
 
     return (
         <aside className={`w-72 bg-white border-l border-gray-200 flex flex-col h-full overflow-y-auto ${className}`}>
@@ -124,7 +134,7 @@ export default function Dashboard({
                                         Assignee
                                     </label>
                                     <p className="text-sm text-gray-900 font-sans">
-                                        {task.assigneeId || 'Unassigned'}
+                                        {getAssigneeName(task.assigneeId)}
                                     </p>
                                 </div>
                                 <div>

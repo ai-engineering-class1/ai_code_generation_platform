@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 import uuid
 
-from app.models.task import TaskWorkflowHistory, Task, TaskStatus, ActivityStatus
+from app.models.task import TaskWorkflowHistory, Task, TaskStatus, ActivityStatus, transition_activity
 
 class ActivityLogService:
     """
@@ -24,7 +24,8 @@ class ActivityLogService:
         activity_type: str,
         situation: str = None,
         task_role: str = None,
-        parent_activity_id: str = None
+        parent_activity_id: str = None,
+        status: TaskStatus = ActivityStatus.IN_PROGRESS
     ) -> TaskWorkflowHistory:
         """
         Creates an ACTIVE activity.
@@ -38,6 +39,7 @@ class ActivityLogService:
             situation: STAR framework - Situation context
             task_role: STAR framework - Task role description
             parent_activity_id: Optional ID of a parent activity
+            status: Initial status of the activity (default: IN_PROGRESS)
             
         Returns:
             The created TaskWorkflowHistory record (Active)
@@ -45,13 +47,16 @@ class ActivityLogService:
         # Close any existing active activities for this operator/type if needed
         # For now, we allow multiple concurrent active activities (e.g. different agents)
         
+        # Ensure status is the value if it's an enum
+        status_value = status.value if hasattr(status, 'value') else status
+
         new_activity = TaskWorkflowHistory(
             id=str(uuid.uuid4()),
             task_id=task_id,
             title=title,
             operator_id=operator_id,
             activity_type=activity_type,
-            status=ActivityStatus.IN_PROGRESS.value,
+            status=status_value,
             situation=situation,
             task_role=task_role,
             activity_start_at=datetime.utcnow(),
@@ -69,11 +74,13 @@ class ActivityLogService:
         db: Session,
         activity_id: str,
         action: str = None,
-        metadata: Dict[str, Any] = None
+        metadata: Dict[str, Any] = None,
+        status: ActivityStatus = None
     ) -> Optional[TaskWorkflowHistory]:
         """
         Updates an ongoing activity with new details without closing it.
         Useful for streaming thoughts or intermediate steps.
+        Also allows non-terminal status transitions (e.g. IN_PROGRESS <-> PENDING_USER_INPUT).
         
         Enforces STAR Framework: Cannot update 'Action' if 'Result' is already populated (Activity Ended).
         """
@@ -83,32 +90,26 @@ class ActivityLogService:
             
         # STAR Framework Rule: Once Result is populated (End Date set), previous stages are frozen.
         if activity.activity_end_at is not None:
-            # Exception: Tie-back is mutable even if frozen
-            # But this method (update_activity) is generally for execution phase Action/Situation updates.
-            # If the user is calling this on a frozen activity, they technically CANNOT update Action/Situation.
-            # We must check what they are trying to update.
-            
-            if action:
-                 raise ValueError(f"Cannot update Action for frozen Activity {activity_id}.")
-            
-            # If it's just metadata (tie-back updates might come via a different path or logic, 
-            # here we assume metadata usually implies active context).
-            # If the user wants to update tie_back, they should generally use a specific method or we allow strictly tie_back metadata.
-            # For simplicity of this service method, we'll block action/metadata on frozen unless explicit.
-            # Let's stick to the simpler rule: No updates to action/metadata once frozen. (Tie-back is separate field).
-            
-            if metadata:
-                 raise ValueError(f"Cannot update Metadata/Situation for frozen Activity {activity_id}.")
+             raise ValueError(f"Cannot update frozen Activity {activity_id}.")
 
         if action:
-            # Append or replace action? Usually we might want to append for logs, 
-            # but for a simple field, let's update it.
             activity.action = action
             
         if metadata:
             current_meta = activity.workflow_metadata or {}
             current_meta.update(metadata)
             activity.workflow_metadata = current_meta
+            
+        if status:
+            new_status = status.value if isinstance(status, ActivityStatus) else status
+            # Validation
+            try:
+                current_status_enum = ActivityStatus(activity.status) if activity.status else ActivityStatus.IN_PROGRESS
+                target_status_enum = ActivityStatus(new_status)
+                transition_activity(current_status_enum, target_status_enum)
+            except ValueError as e:
+                raise e
+            activity.status = new_status
             
         db.commit()
         db.refresh(activity)
@@ -185,10 +186,21 @@ class ActivityLogService:
             
         activity.result = result
         # Handle Enum or String input
+        new_status = status
         if isinstance(status, ActivityStatus):
-             activity.status = status.value
-        else:
-             activity.status = status
+             new_status = status.value
+        
+        # Validation: Activity Status Transition
+        # Current status in DB is string, convert to Enum
+        try:
+            current_status_enum = ActivityStatus(activity.status) if activity.status else ActivityStatus.IN_PROGRESS
+            target_status_enum = ActivityStatus(new_status)
+            transition_activity(current_status_enum, target_status_enum)
+        except ValueError as e:
+            # Re-raise as is, or wrap? Sticking to ValueError is fine for service layer.
+            raise e
+
+        activity.status = new_status
              
         activity.tie_back = tie_back
         activity.activity_end_at = datetime.utcnow() # Mark as completed

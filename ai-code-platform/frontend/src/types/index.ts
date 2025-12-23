@@ -35,6 +35,7 @@ export interface Task {
   assigneeId?: string
   createdAt: string
   updatedAt: string
+  allowed_transitions?: string[] // From backend property
 }
 
 export type TaskStage =
