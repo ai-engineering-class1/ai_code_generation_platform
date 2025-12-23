@@ -12,10 +12,9 @@ interface TerminalProps {
     onClose: () => void;
     mode?: 'fixed' | 'embedded' | 'popup';
     onStatusChange?: (isConnected: boolean) => void;
-    taskId?: string | null;
 }
 
-export default function Terminal({ isOpen, onClose, mode = 'fixed', onStatusChange, taskId }: TerminalProps) {
+export default function Terminal({ isOpen, onClose, mode = 'fixed', onStatusChange }: TerminalProps) {
     const terminalRef = useRef<HTMLDivElement>(null);
     const xtermRef = useRef<XTerm | null>(null);
     const fitAddonRef = useRef<FitAddon | null>(null);
@@ -27,18 +26,29 @@ export default function Terminal({ isOpen, onClose, mode = 'fixed', onStatusChan
     const [isConnected, setIsConnected] = useState(false);
     const [isSafeMode, setIsSafeMode] = useState(true);
     const [terminalTitle, setTerminalTitle] = useState('Terminal Console');
+    const [hasConnected, setHasConnected] = useState(false);
 
     // Helper to safely fit the terminal
     const safeFit = () => {
         if (!fitAddonRef.current || !xtermRef.current || !terminalRef.current) return;
-        if (terminalRef.current.clientWidth === 0 || terminalRef.current.clientHeight === 0) return;
-        if (!terminalRef.current.offsetParent) return;
-        // @ts-ignore
-        if (xtermRef.current._core && xtermRef.current._core._isDisposed) return;
 
-        try {
-            fitAddonRef.current.fit();
-        } catch (e) { }
+        // Use requestAnimationFrame to ensure DOM is settled
+        requestAnimationFrame(() => {
+            if (!terminalRef.current || !xtermRef.current) return;
+            if (terminalRef.current.clientWidth === 0 || terminalRef.current.clientHeight === 0) return;
+            // Check visibility explicitly
+            if (window.getComputedStyle(terminalRef.current).display === 'none') return;
+            if (!terminalRef.current.offsetParent) return;
+
+            // @ts-ignore
+            if (xtermRef.current._core && xtermRef.current._core._isDisposed) return;
+
+            try {
+                fitAddonRef.current?.fit();
+            } catch (e) {
+                console.warn('XTerm fit error:', e);
+            }
+        });
     };
 
     useEffect(() => {
@@ -85,9 +95,6 @@ export default function Terminal({ isOpen, onClose, mode = 'fixed', onStatusChan
             apiBase = apiBase.replace(/\/$/, '');
 
             let wsUrl = apiBase.replace(/^http/, 'ws') + `/api/v1/terminal/ws?cols=${term.cols}&rows=${term.rows}`;
-            if (taskId) {
-                wsUrl += `&taskId=${taskId}`;
-            }
 
 
             term.write(`\x1b[90mConnecting...\x1b[0m\r\n`);
@@ -97,6 +104,7 @@ export default function Terminal({ isOpen, onClose, mode = 'fixed', onStatusChan
             ws.onopen = () => {
                 if (!isMounted.current) { ws?.close(); return; }
                 setIsConnected(true);
+                setHasConnected(true);
                 if (onStatusChange) onStatusChange(true);
 
                 // FORCE PTY INITIALIZATION
@@ -239,8 +247,16 @@ export default function Terminal({ isOpen, onClose, mode = 'fixed', onStatusChan
                     </div>
                 </div>
             )}
-            <div className={`flex-1 overflow-hidden p-2 ${mode === 'embedded' ? 'h-full' : ''} ${isMinimized ? 'hidden' : ''}`}>
+            <div className={`flex-1 overflow-hidden p-2 relative ${mode === 'embedded' ? 'h-full' : ''} ${isMinimized ? 'hidden' : ''}`}>
                 <div ref={terminalRef} className="h-full w-full" />
+                {!isConnected && hasConnected && (
+                    <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
+                        <div className="px-4 py-2 bg-red-950/80 border border-red-500 rounded text-red-200 font-mono text-sm flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                            Session Disconnected
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
