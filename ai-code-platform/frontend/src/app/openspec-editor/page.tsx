@@ -96,11 +96,10 @@ function EditorContent() {
         const aIdParam = searchParams.get('activityId');
 
         // Use activityId if provided, otherwise fall back to taskId
-        const effectiveTaskId = aIdParam || tIdParam;
         const pId = pIdParam || `draft-${new Date().getTime()}`;
 
         setProjectId(pId);
-        setTaskId(effectiveTaskId);
+        setTaskId(tIdParam);
 
         // Define default project structure
         const defaultProject: OpenSpecProject = {
@@ -119,9 +118,10 @@ function EditorContent() {
         const fetchData = async () => {
             if (!pIdParam) { // Only proceed if projectId is explicitly in URL, otherwise it's a draft
                 // Try to load from workspace if effectiveTaskId exists for a draft project
-                if (effectiveTaskId) {
+                const effectiveId = aIdParam || tIdParam;
+                if (effectiveId) {
                     try {
-                        const initResult = await api.initFromWorkspace(pId, effectiveTaskId);
+                        const initResult = await api.initFromWorkspace(pId, effectiveId);
                         if (initResult.success && initResult.specContent.specTree.length > 0) {
                             setProject(prev => prev ? {
                                 ...prev,
@@ -176,10 +176,10 @@ function EditorContent() {
                 } : undefined);
 
                 // 2. Fetch Tasks (Parallel-ish)
-                if (effectiveTaskId) {
+                if (tIdParam) {
                     // Don't await strictly for the UI update above, but we can await here for sequential logic if needed
                     // Using promise to let it run
-                    apiClient.get(`/projects/${pId}/tasks/${effectiveTaskId}`)
+                    apiClient.get(`/projects/${pId}/tasks/${tIdParam}`)
                         .then(taskRes => {
                             if (taskRes.data) {
                                 setTaskDescription(taskRes.data.description || 'No description available for this task.');
@@ -471,6 +471,7 @@ function EditorContent() {
                     isLoading={isLoading}
                     onOpenTerminal={handleOpenTerminal}
                     isTerminalConnected={isTerminalConnected}
+                    isTerminalOpen={showTerminal}
                 />
 
                 <Dashboard
@@ -507,7 +508,6 @@ function EditorContent() {
                 isOpen={showTerminal}
                 onClose={handleCloseTerminal}
                 onStatusChange={setIsTerminalConnected}
-                taskId={taskId}
             />
 
             {loadingMessage && <LoadingOverlay message={loadingMessage} />}
