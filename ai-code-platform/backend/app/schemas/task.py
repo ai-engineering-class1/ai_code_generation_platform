@@ -74,15 +74,24 @@ class TaskUpdate(BaseModel):
     priority: Optional[str] = None
     assignee_id: Optional[str] = None
 
+    @field_validator('title', 'description', 'status', 'current_stage', 'priority', 'assignee_id', mode='before')
+    @classmethod
+    def empty_str_to_none(cls, v):
+        """Convert empty strings to None"""
+        if v == "":
+            return None
+        return v
+
 
 class TaskResponse(TaskBase):
     id: str
     project_id: str
     status: str
     current_stage: str
-    assignee_id: Optional[str] = None
+    current_stage: str
     created_at: datetime
     updated_at: Optional[datetime] = None
+    allowed_transitions: List[str] = []
     
     class Config:
         from_attributes = True

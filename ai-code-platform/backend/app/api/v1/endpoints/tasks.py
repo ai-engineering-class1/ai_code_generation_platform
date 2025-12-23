@@ -15,6 +15,7 @@ from app.schemas.task import (
 from app.services.claude_service import ClaudeService
 from app.services.activity_log_service import ActivityLogService
 from app.services.notification_service import notify_task_assigned
+from app.models.task import TaskStatus, ActivityStatus, transition
 
 router = APIRouter()
 
@@ -71,6 +72,12 @@ async def create_task(
     # Use by_alias=False to get snake_case field names for the database
     task_dict = task_data.dict(by_alias=False)
     task_dict['project_id'] = project_id
+    
+    # Logic: If assignee is given, set status to IN_PROGRESS (if not already set)
+    # The default status in model is PENDING.
+    if task_dict.get('assignee_id'):
+        task_dict['status'] = TaskStatus.IN_PROGRESS
+    
     new_task = Task(**task_dict)
     
     db.add(new_task)
@@ -78,13 +85,35 @@ async def create_task(
     db.refresh(new_task)
     
     # Notify assignee if task is assigned to someone other than the creator
-    if new_task.assignee_id and new_task.assignee_id != current_user.id:
-        try:
-            notify_task_assigned(db, new_task, new_task.assignee_id)
-            db.commit()
-        except Exception as e:
-            # Log error but don't fail task creation
-            print(f"Error sending assignment notification: {e}")
+    if new_task.assignee_id:
+        # Create Activity Log: Pending User Input
+        # Situation: Task assigned to user
+        from app.models.task import ActivityStatus
+        
+        assignee_name = "User"
+        assignee = db.query(User).filter(User.id == new_task.assignee_id).first()
+        if assignee:
+            assignee_name = assignee.name or assignee.email
+
+        activity_service = ActivityLogService()
+        activity_service.start_activity(
+            db=db,
+            task_id=new_task.id,
+            title="Task Assigned",
+            operator_id="system",  # System generated
+            activity_type="system_event",
+            situation=f"Task created and assigned to {assignee_name}.",
+            task_role=f"Wait for {assignee_name} to start work.",
+            status=ActivityStatus.PENDING_USER_INPUT
+        )
+
+        if new_task.assignee_id != current_user.id:
+            try:
+                notify_task_assigned(db, new_task, new_task.assignee_id)
+                db.commit()
+            except Exception as e:
+                # Log error but don't fail task creation
+                print(f"Error sending assignment notification: {e}")
     
     return new_task
 
@@ -242,16 +271,64 @@ async def update_task(
     
     # Store old assignee_id to detect changes
     old_assignee_id = task.assignee_id
-    
+    print(f"DEBUG: Updating task {task_id}. Old assignee: {old_assignee_id}. Payload status: {task_data.status} Assignee: {task_data.assignee_id}")
+
+    # Validation: Status Transition
+    if task_data.status and task_data.status != task.status:
+
+        try:
+            # Validate transition (will raise ValueError if invalid)
+            # Use enum value for comparison/transition check
+            current_status_enum = TaskStatus(task.status)
+            new_status_enum = TaskStatus(task_data.status)
+            transition(current_status_enum, new_status_enum)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e)
+            )
+
     # Update fields
     for field, value in task_data.dict(exclude_unset=True).items():
+        print(f"DEBUG: Setting {field} to {value}")
         setattr(task, field, value)
     
     db.commit()
     db.refresh(task)
+    print(f"DEBUG: Update committed. New assignee: {task.assignee_id}")
     
     # Notify if assignee changed and new assignee is different from current user
     if old_assignee_id != task.assignee_id and task.assignee_id:
+        print("DEBUG: Assignee change detected. Creating activity...")
+        # Assignment Logic: Create Activity if newly assigned (Unassigned -> Assigned)
+        # Or even just Assgined -> Assigned (Re-assigned)
+        
+        assignee_name = "User"
+        assignee = db.query(User).filter(User.id == task.assignee_id).first()
+        if assignee:
+            assignee_name = assignee.name or assignee.email
+            
+        activity_service = ActivityLogService()
+        activity_service.start_activity(
+            db=db,
+            task_id=task.id,
+            title="Task Assigned",
+            operator_id="system",
+            activity_type="system_event",
+            situation=f"Task re-assigned to {assignee_name}.",
+            task_role=f"Wait for {assignee_name} to start work.",
+            status=ActivityStatus.PENDING_USER_INPUT
+        )
+
+        # Auto-transition: PENDING -> IN_PROGRESS on assignment
+        if task.status == TaskStatus.PENDING:
+            # Check if allowed
+            from app.models.task import can_transition
+            if can_transition(TaskStatus.PENDING, TaskStatus.IN_PROGRESS):
+                task.status = TaskStatus.IN_PROGRESS
+                db.commit()
+                db.refresh(task)
+
         # Only notify if assignee is different from the person making the change
         if task.assignee_id != current_user.id:
             try:

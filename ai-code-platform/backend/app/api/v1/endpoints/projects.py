@@ -18,9 +18,7 @@ async def list_projects(
     current_user: User = Depends(get_current_active_user)
 ):
     """List all projects for the current user"""
-    projects = db.query(Project).filter(
-        Project.owner_id == current_user.id
-    ).offset(skip).limit(limit).all()
+    projects = db.query(Project).offset(skip).limit(limit).all()
     return projects
 
 
