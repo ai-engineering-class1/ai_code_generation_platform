@@ -38,6 +38,20 @@ async def start_activity(
         parent_activity_id=activity_in.parent_activity_id
     )
 
+@router.get("/{activity_id}", response_model=ActivityResponse)
+async def get_activity(
+    activity_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Get a single activity by ID.
+    """
+    activity = service.get_activity(db, activity_id)
+    if not activity:
+        raise HTTPException(status_code=404, detail="Activity not found")
+    return activity
+
 @router.put("/{activity_id}", response_model=ActivityResponse)
 async def update_activity(
     activity_id: str,

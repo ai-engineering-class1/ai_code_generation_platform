@@ -23,8 +23,8 @@ user_sessions: Dict[str, Dict[str, Any]] = {}
 task_manager: Dict[str, Dict[str, Any]] = {}
 
 # Services
-# Workspace root should be under backend/temp/<taskId>/codebase/simplest-repo/...
-openspec_service = OpenSpecService("./temp")
+# Workspace root should be under settings.WORKSPACE_ROOT/<taskId>/codebase/simplest-repo/...
+openspec_service = OpenSpecService(settings.WORKSPACE_ROOT)
 claude_service = ClaudeService()
 
 # Helper function to ensure repository is downloaded
@@ -38,7 +38,7 @@ async def ensure_repo_downloaded(task_id: str) -> bool:
     import os
     from pathlib import Path
     
-    base_dir = Path("./temp")
+    base_dir = Path(settings.WORKSPACE_ROOT)
     simplest_repo_dir = base_dir / task_id / "codebase" / "simplest-repo"
     
     # Check if repository is already downloaded

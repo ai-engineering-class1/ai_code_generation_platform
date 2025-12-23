@@ -54,6 +54,7 @@ class Settings(BaseSettings):
     
     # Terminal
     TERMINAL_SAFE_MODE: bool = True
+    WORKSPACE_ROOT: str = "./temp"
     
     # CORS
     CORS_ORIGINS: List[str] = ["http://localhost:3012", "http://localhost:3000", "http://127.0.0.1:3012"]

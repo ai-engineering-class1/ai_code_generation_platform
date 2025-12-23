@@ -12,9 +12,10 @@ interface TerminalProps {
     onClose: () => void;
     mode?: 'fixed' | 'embedded' | 'popup';
     onStatusChange?: (isConnected: boolean) => void;
+    queryParams?: Record<string, string>;
 }
 
-export default function Terminal({ isOpen, onClose, mode = 'fixed', onStatusChange }: TerminalProps) {
+export default function Terminal({ isOpen, onClose, mode = 'fixed', onStatusChange, queryParams }: TerminalProps) {
     const terminalRef = useRef<HTMLDivElement>(null);
     const xtermRef = useRef<XTerm | null>(null);
     const fitAddonRef = useRef<FitAddon | null>(null);
@@ -96,8 +97,17 @@ export default function Terminal({ isOpen, onClose, mode = 'fixed', onStatusChan
 
             let wsUrl = apiBase.replace(/^http/, 'ws') + `/api/v1/terminal/ws?cols=${term.cols}&rows=${term.rows}`;
 
+            // Append additional query params (e.g. activityId)
+            if (queryParams) {
+                Object.entries(queryParams).forEach(([key, value]) => {
+                    if (value) {
+                        wsUrl += `&${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
+                    }
+                });
+            }
 
-            term.write(`\x1b[90mConnecting...\x1b[0m\r\n`);
+
+            // term.write(`\x1b[90mConnecting...\x1b[0m\r\n`);
 
             ws = new WebSocket(wsUrl);
 
@@ -130,7 +140,7 @@ export default function Terminal({ isOpen, onClose, mode = 'fixed', onStatusChan
                     else if (msg.type === 'setup') {
                         setTerminalTitle(msg.title);
                         setIsSafeMode(msg.safe_mode);
-                        term?.write(`\r\n\x1b[32mConnected to ${msg.title}\x1b[0m\r\n`);
+                        // term?.write(`\r\n\x1b[32mConnected to ${msg.title}\x1b[0m\r\n`);
                     }
                 } catch (e) { term?.write(event.data); }
             };
