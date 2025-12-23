@@ -8,15 +8,64 @@ from app.core.config import settings
 
 router = APIRouter()
 
+# Global set to track active sessions by activityId for locking
+active_activity_sessions = set()
+
 @router.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket, cols: int = Query(80), rows: int = Query(24)):
+async def websocket_endpoint(
+    websocket: WebSocket, 
+    cols: int = Query(80), 
+    rows: int = Query(24),
+    activityId: str = Query(None)
+):
     await websocket.accept()
 
-    session = RestrictedShell(websocket, rows=rows, cols=cols)
-    await session.run()
+    # 1. Session Locking (Gatekeeper)
+    if activityId:
+        if activityId in active_activity_sessions:
+            # Policy Violation: Concurrent editing not allowed
+            await websocket.close(code=1008, reason="There is already an active session for this activity.")
+            return
+        active_activity_sessions.add(activityId)
+
+    try:
+        # 2. Path Resolution (Controller Logic)
+        cwd = os.getcwd() # Default to root
+        
+        if activityId:
+            # Construct base path using configured WORKSPACE_ROOT
+            # This supports moving the temp folder to a secure/isolated location (e.g. Docker mount)
+            base_temp_path = os.path.join(settings.WORKSPACE_ROOT, activityId, "codebase")
+
+            if os.path.exists(base_temp_path):
+                # Search for the repository folder inside
+                try:
+                    entries = os.listdir(base_temp_path)
+                    # Filter for directories
+                    dirs = [d for d in entries if os.path.isdir(os.path.join(base_temp_path, d))]
+                    
+                    if len(dirs) == 1:
+                        # Found exactly one repo folder
+                        cwd = os.path.join(base_temp_path, dirs[0])
+                        print(f"DEBUG: Resolved Activity CWD: {cwd}")
+                    else:
+                        print(f"WARNING: Ambiguous or missing repo in {base_temp_path}. Found: {dirs}. Fallback to root.")
+                except Exception as e:
+                     print(f"ERROR: Failed to scan activity directory: {e}")
+            else:
+                 print(f"WARNING: Activity directory {base_temp_path} does not exist. Fallback to root.")
+
+        # 3. Instantiate Pure Shell
+        session = RestrictedShell(websocket, rows=rows, cols=cols, cwd=cwd)
+        await session.run()
+    
+    finally:
+        # 4. Release Lock
+        if activityId and activityId in active_activity_sessions:
+            active_activity_sessions.remove(activityId)
 
 class RestrictedShell:
-    def __init__(self, websocket: WebSocket, rows: int = 24, cols: int = 80):
+    def __init__(self, websocket: WebSocket, rows: int = 24, cols: int = 80, cwd: str = None):
         self.websocket = websocket
         self.safe_mode = settings.TERMINAL_SAFE_MODE
         self.loop = asyncio.get_running_loop()
@@ -30,10 +79,12 @@ class RestrictedShell:
         # Determine strict shell command or path for claude
         self.claude_path = self._find_claude()
         
-        # Move CWD up one level if we are in 'backend' to serve the project root
-        self.cwd = os.getcwd()
-        if os.path.basename(self.cwd) == 'backend':
-            self.cwd = os.path.dirname(self.cwd)
+        # Use provided CWD or fallback to current
+        self.cwd = cwd if cwd else os.getcwd()
+        
+        # Safety fallback if injected CWD is somehow bad (though Controller should have handled it)
+        if not os.path.exists(self.cwd):
+            self.cwd = os.getcwd()
             
         self.use_pty = False
         if os.name == 'nt':

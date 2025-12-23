@@ -89,3 +89,9 @@ export const exportOpenSpecChanges = async (projectId: string, taskId?: string) 
     });
     return response.data;
 };
+
+// Get Activity Details
+export const getActivity = async (activityId: string) => {
+    const response = await apiClient.get(`/activities/${activityId}`);
+    return response.data;
+};

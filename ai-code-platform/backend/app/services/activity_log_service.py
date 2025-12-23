@@ -234,3 +234,9 @@ class ActivityLogService:
             "status": None,
             "task_role": None
         }
+
+    def get_activity(self, db: Session, activity_id: str) -> Optional[TaskWorkflowHistory]:
+        """
+        Get a single activity by ID.
+        """
+        return db.query(TaskWorkflowHistory).filter(TaskWorkflowHistory.id == activity_id).first()

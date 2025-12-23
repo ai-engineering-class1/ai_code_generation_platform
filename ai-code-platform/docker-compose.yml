@@ -29,8 +29,10 @@ services:
       - ANTHROPIC_AUTH_TOKEN=${ANTHROPIC_AUTH_TOKEN}
       - ANTHROPIC_BASE_URL=https://open.bigmodel.cn/api/anthropic
       - API_TIMEOUT_MS=600000
+      - WORKSPACE_ROOT=/safe_workspace
     volumes:
       - ./backend:/app # Optional: for hot reloading/config access
+      - /tmp/safe_workspace:/safe_workspace # Bind mount host /tmp/safe_workspace to container /safe_workspace
 
   frontend:
     build:

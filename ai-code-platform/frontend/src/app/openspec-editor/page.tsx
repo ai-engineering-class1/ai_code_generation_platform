@@ -33,6 +33,7 @@ function EditorContent() {
     const [project, setProject] = useState<OpenSpecProject | undefined>(undefined);
     const [taskDescription, setTaskDescription] = useState<string>('');
     const [task, setTask] = useState<Task | undefined>(undefined);
+    const [activity, setActivity] = useState<any>(undefined);
     const [selectedSpecId, setSelectedSpecId] = useState<string | undefined>(undefined);
     const [selectedSpec, setSelectedSpec] = useState<Specification | undefined>(undefined);
     const [specContent, setSpecContent] = useState<string>('');
@@ -175,11 +176,28 @@ function EditorContent() {
                     repository: repo
                 } : undefined);
 
-                // 2. Fetch Tasks (Parallel-ish)
-                if (tIdParam) {
+                // 2. Fetch Tasks & Activity Context
+                let resolvedTaskId = tIdParam;
+
+                if (!resolvedTaskId && aIdParam) {
+                    try {
+                        const activity = await api.getActivity(aIdParam);
+                        if (activity) {
+                            setActivity(activity);
+                            if (activity.task_id) {
+                                resolvedTaskId = activity.task_id;
+                                setTaskId(resolvedTaskId);
+                            }
+                        }
+                    } catch (e) {
+                        console.warn("Failed to resolve task from activity", e);
+                    }
+                }
+
+                if (resolvedTaskId) {
                     // Don't await strictly for the UI update above, but we can await here for sequential logic if needed
                     // Using promise to let it run
-                    apiClient.get(`/projects/${pId}/tasks/${tIdParam}`)
+                    apiClient.get(`/projects/${pId}/tasks/${resolvedTaskId}`)
                         .then(taskRes => {
                             if (taskRes.data) {
                                 setTaskDescription(taskRes.data.description || 'No description available for this task.');
@@ -410,6 +428,7 @@ function EditorContent() {
                     <span className="text-gray-500 text-sm font-medium ml-1">
                         {project?.projectName ? `/${project.projectName}` : ''}
                         {task?.title ? `/${task.title}` : ''}
+                        {activity?.title ? `/${activity.title}` : ''}
                     </span>
                     {task?.status && (
                         <span className="ml-2 px-2.5 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-800">
@@ -508,6 +527,7 @@ function EditorContent() {
                 isOpen={showTerminal}
                 onClose={handleCloseTerminal}
                 onStatusChange={setIsTerminalConnected}
+                queryParams={searchParams.get('activityId') ? { activityId: searchParams.get('activityId')! } : undefined}
             />
 
             {loadingMessage && <LoadingOverlay message={loadingMessage} />}
