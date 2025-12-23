@@ -490,7 +490,6 @@ function EditorContent() {
                     isLoading={isLoading}
                     onOpenTerminal={handleOpenTerminal}
                     isTerminalConnected={isTerminalConnected}
-                    isTerminalOpen={showTerminal}
                 />
 
                 <Dashboard
