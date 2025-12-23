@@ -76,26 +76,14 @@ async def ensure_repo_downloaded(task_id: str) -> bool:
             zip_path.write_bytes(response.content)
             
             # Extract
-            import subprocess
-            if os.name == 'nt':  # Windows
-                try:
-                    subprocess.run(
-                        ["tar", "-xf", str(zip_path), "-C", str(simplest_repo_dir)],
-                        check=True,
-                        capture_output=True
-                    )
-                except:
-                    subprocess.run(
-                        ["powershell", "-command", f"Expand-Archive -Path '{zip_path}' -DestinationPath '{simplest_repo_dir}' -Force"],
-                        check=True,
-                        capture_output=True
-                    )
-            else:  # Linux/Mac
-                subprocess.run(
-                    ["unzip", "-o", str(zip_path), "-d", str(simplest_repo_dir)],
-                    check=True,
-                    capture_output=True
-                )
+            # Extract using Python's built-in zipfile (Works on Linux/Windows/Mac without external dependencies)
+            import zipfile
+            try:
+                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                    zip_ref.extractall(simplest_repo_dir)
+            except Exception as e:
+                print(f"Zipfile extraction failed: {e}")
+                raise e
             
             # Clean up zip file
             zip_path.unlink()
