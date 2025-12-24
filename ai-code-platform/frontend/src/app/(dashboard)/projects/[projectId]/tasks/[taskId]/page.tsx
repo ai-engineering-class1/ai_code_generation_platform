@@ -416,7 +416,7 @@ export default function TaskDetailPage({
                               return;
                             }
                             if (window.confirm('Are you sure you want to assign this task to an AI Agent?')) {
-                              assignToAgentMutation.mutate();
+                              assignToAgentMutation.mutate({ sourceActivityId: activity.id });
                             }
                           }}
                           className="px-3 py-1.5 text-xs font-medium bg-purple-600 text-white rounded hover:bg-purple-700 transition flex items-center gap-2"
@@ -561,9 +561,13 @@ export default function TaskDetailPage({
 
 
   const assignToAgentMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (params?: { sourceActivityId?: string }) => {
       // Call new endpoint which returns an Activity object
-      const response = await apiClient.post(`/projects/${projectId}/tasks/${taskId}/assign`)
+      let url = `/projects/${projectId}/tasks/${taskId}/assign`
+      if (params?.sourceActivityId) {
+        url += `?source_activity_id=${params.sourceActivityId}`
+      }
+      const response = await apiClient.post(url)
       return response.data
     },
     onSuccess: (activity) => {

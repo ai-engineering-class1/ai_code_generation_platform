@@ -73,13 +73,15 @@ class ActivityStatus(str, enum.Enum):
     PENDING_USER_INPUT = "pending_user_input"
     COMPLETED = "completed"
     FAILED = "failed"
+    TRANSFERRED = "transferred"
 
 
 ACTIVITY_ALLOWED: Dict[ActivityStatus, Set[ActivityStatus]] = {
-    ActivityStatus.IN_PROGRESS: {ActivityStatus.PENDING_USER_INPUT, ActivityStatus.COMPLETED, ActivityStatus.FAILED},
-    ActivityStatus.PENDING_USER_INPUT: {ActivityStatus.IN_PROGRESS, ActivityStatus.COMPLETED, ActivityStatus.FAILED},
+    ActivityStatus.IN_PROGRESS: {ActivityStatus.PENDING_USER_INPUT, ActivityStatus.COMPLETED, ActivityStatus.FAILED, ActivityStatus.TRANSFERRED},
+    ActivityStatus.PENDING_USER_INPUT: {ActivityStatus.IN_PROGRESS, ActivityStatus.COMPLETED, ActivityStatus.FAILED, ActivityStatus.TRANSFERRED},
     ActivityStatus.COMPLETED: set(),
     ActivityStatus.FAILED: set(),
+    ActivityStatus.TRANSFERRED: set(),
 }
 
 def can_activity_transition(src: ActivityStatus, dst: ActivityStatus) -> bool:

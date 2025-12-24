@@ -29,7 +29,13 @@ export default function NewProjectPage() {
 
   const createProjectMutation = useMutation({
     mutationFn: async (data: CreateProjectData) => {
-      const response = await apiClient.post('/projects', data)
+      const payload = {
+        name: data.name,
+        description: data.description,
+        jira_project_key: data.jiraProjectKey,
+        github_repo_url: data.githubRepoUrl,
+      }
+      const response = await apiClient.post('/projects', payload)
       return response.data
     },
     onSuccess: (data) => {

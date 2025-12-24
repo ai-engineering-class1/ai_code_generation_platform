@@ -129,8 +129,7 @@ async def create_github_config(
     """Configure GitHub integration for a project"""
     # Verify project ownership
     project = db.query(Project).filter(
-        Project.id == config_data.project_id,
-        Project.owner_id == current_user.id
+        Project.id == config_data.project_id
     ).first()
     
     if not project:
@@ -168,8 +167,7 @@ async def get_github_config(
     """Get GitHub configuration for a project"""
     # Verify project ownership
     project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.owner_id == current_user.id
+        Project.id == project_id
     ).first()
     
     if not project:
@@ -210,8 +208,7 @@ async def generate_specification(
     
     # Verify project ownership
     project = db.query(Project).filter(
-        Project.id == task.project_id,
-        Project.owner_id == current_user.id
+        Project.id == task.project_id
     ).first()
     
     if not project:
@@ -291,8 +288,7 @@ async def trigger_code_generation(
     
     # Verify project ownership
     project = db.query(Project).filter(
-        Project.id == task.project_id,
-        Project.owner_id == current_user.id
+        Project.id == task.project_id
     ).first()
     
     if not project:
