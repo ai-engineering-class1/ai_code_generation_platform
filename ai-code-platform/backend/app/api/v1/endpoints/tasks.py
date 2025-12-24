@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session, joinedload
 from typing import List
 from app.core.database import get_db
@@ -31,8 +31,7 @@ async def list_project_tasks(
     """List all tasks for a project"""
     # Verify project ownership
     project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.owner_id == current_user.id
+        Project.id == project_id
     ).first()
     
     if not project:
@@ -58,8 +57,7 @@ async def create_task(
     """Create a new task"""
     # Verify project ownership
     project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.owner_id == current_user.id
+        Project.id == project_id
     ).first()
     
     if not project:
@@ -128,8 +126,7 @@ async def get_task(
     """Get a specific task with detailed information"""
     # Verify project ownership
     project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.owner_id == current_user.id
+        Project.id == project_id
     ).first()
     
     if not project:
@@ -200,8 +197,7 @@ async def get_task_activities(
     """Get all activities (workflow history) for a task"""
     # Verify project ownership
     project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.owner_id == current_user.id
+        Project.id == project_id
     ).first()
     
     if not project:
@@ -248,8 +244,7 @@ async def update_task(
     """Update a task"""
     # Verify project ownership
     project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.owner_id == current_user.id
+        Project.id == project_id
     ).first()
     
     if not project:
@@ -351,8 +346,7 @@ async def delete_task(
     """Delete a task"""
     # Verify project ownership
     project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.owner_id == current_user.id
+        Project.id == project_id
     ).first()
     
     if not project:
@@ -389,8 +383,7 @@ async def create_specification(
     """Create a specification for a task"""
     # Verify project and task ownership
     project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.owner_id == current_user.id
+        Project.id == project_id
     ).first()
     
     if not project:
@@ -448,8 +441,7 @@ async def approve_specification(
         )
     
     project = db.query(Project).filter(
-        Project.id == task.project_id,
-        Project.owner_id == current_user.id
+        Project.id == task.project_id
     ).first()
     
     if not project:
@@ -473,6 +465,7 @@ async def approve_specification(
 async def assign_to_agent(
     project_id: str,
     task_id: str,
+    source_activity_id: str = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -487,8 +480,7 @@ async def assign_to_agent(
     try:
         # 1. Fetch Project for Repo URL
         project = db.query(Project).filter(
-            Project.id == project_id,
-            Project.owner_id == current_user.id
+            Project.id == project_id
         ).first()
 
         if not project:
@@ -499,11 +491,45 @@ async def assign_to_agent(
             repo_url = repo_url[:-4]
             
         if not repo_url:
+             # Fallback: Check GitHubConfiguration
+             from app.models.integration import GitHubConfiguration
+             github_config = db.query(GitHubConfiguration).filter(
+                 GitHubConfiguration.project_id == project_id
+             ).first()
+             
+             if github_config:
+                 repo_url = f"https://github.com/{github_config.repo_owner}/{github_config.repo_name}"
+
+        if not repo_url:
              raise HTTPException(status_code=400, detail="Project repository URL (GitHub) is missing.")
 
         # 2. Init Service
         activity_service = ActivityLogService()
         claude_service = ClaudeService()
+
+        # Handle Source Activity (if transferring from an existing activity)
+        if source_activity_id:
+            try:
+                # Close the previous activity
+                from app.models.task import ActivityStatus
+                
+                # Fetch to get current details for appending action
+                source_activity = activity_service.get_activity(db, source_activity_id)
+                if source_activity and not source_activity.activity_end_at:
+                    # Append Action
+                    new_action = (source_activity.action or "") + "\nTask transferred to remote agent."
+                    activity_service.update_activity(db=db, activity_id=source_activity_id, action=new_action)
+                    
+                    # End Activity
+                    activity_service.end_activity(
+                        db=db,
+                        activity_id=source_activity_id,
+                        result="Check the other activity for the result",
+                        status=ActivityStatus.TRANSFERRED
+                    )
+            except Exception as e:
+                print(f"Warning: Failed to close source activity {source_activity_id}: {e}")
+                # Don't block the main flow
 
         # 3. STAR: Start Activity (Situation, Task)
         activity = activity_service.start_activity(

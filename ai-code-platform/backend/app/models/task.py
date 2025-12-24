@@ -73,6 +73,27 @@ class ActivityStatus(str, enum.Enum):
     PENDING_USER_INPUT = "pending_user_input"
     COMPLETED = "completed"
     FAILED = "failed"
+    TRANSFERRED = "transferred"
+
+
+ACTIVITY_ALLOWED: Dict[ActivityStatus, Set[ActivityStatus]] = {
+    ActivityStatus.IN_PROGRESS: {ActivityStatus.PENDING_USER_INPUT, ActivityStatus.COMPLETED, ActivityStatus.FAILED, ActivityStatus.TRANSFERRED},
+    ActivityStatus.PENDING_USER_INPUT: {ActivityStatus.IN_PROGRESS, ActivityStatus.COMPLETED, ActivityStatus.FAILED, ActivityStatus.TRANSFERRED},
+    ActivityStatus.COMPLETED: set(),
+    ActivityStatus.FAILED: set(),
+    ActivityStatus.TRANSFERRED: set(),
+}
+
+def can_activity_transition(src: ActivityStatus, dst: ActivityStatus) -> bool:
+    return dst in ACTIVITY_ALLOWED.get(src, set())
+
+def transition_activity(current: ActivityStatus, dst: ActivityStatus) -> ActivityStatus:
+    if can_activity_transition(current, dst):
+        return dst
+    # Allow self-transition
+    if current == dst:
+        return dst
+    raise ValueError(f"invalid activity transition {current} -> {dst}")
 
 
 ACTIVITY_ALLOWED: Dict[ActivityStatus, Set[ActivityStatus]] = {

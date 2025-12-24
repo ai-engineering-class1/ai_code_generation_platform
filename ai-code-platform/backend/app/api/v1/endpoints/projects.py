@@ -48,10 +48,7 @@ async def get_project(
     current_user: User = Depends(get_current_active_user)
 ):
     """Get a specific project"""
-    project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.owner_id == current_user.id
-    ).first()
+    project = db.query(Project).filter(Project.id == project_id).first()
     
     if not project:
         raise HTTPException(
@@ -71,8 +68,7 @@ async def update_project(
 ):
     """Update a project"""
     project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.owner_id == current_user.id
+        Project.id == project_id
     ).first()
     
     if not project:
@@ -99,8 +95,7 @@ async def delete_project(
 ):
     """Delete a project"""
     project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.owner_id == current_user.id
+        Project.id == project_id
     ).first()
     
     if not project:

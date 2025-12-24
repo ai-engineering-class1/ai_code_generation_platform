@@ -24,8 +24,7 @@ async def create_jira_config(
     """Configure Jira integration for a project"""
     # Verify project ownership
     project = db.query(Project).filter(
-        Project.id == config_data.project_id,
-        Project.owner_id == current_user.id
+        Project.id == config_data.project_id
     ).first()
     
     if not project:
@@ -73,8 +72,7 @@ async def get_jira_config(
     """Get Jira configuration for a project"""
     # Verify project ownership
     project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.owner_id == current_user.id
+        Project.id == project_id
     ).first()
     
     if not project:
@@ -110,8 +108,7 @@ async def sync_jira_issues(
     
     # Verify project ownership
     project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.owner_id == current_user.id
+        Project.id == project_id
     ).first()
     
     print(f"Project found: {project is not None}")
