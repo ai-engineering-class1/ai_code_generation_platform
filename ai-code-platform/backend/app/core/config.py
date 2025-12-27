@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     
     # Claude/Anthropic
     ANTHROPIC_API_KEY: str = ""
+    OPENAI_API_KEY: str = ""
     # Claude Code CLI
     ANTHROPIC_AUTH_TOKEN: str = ""
     ANTHROPIC_BASE_URL: str = ""
