@@ -4,10 +4,8 @@ Here is the summary of what we have accomplished:
 
 1. Core Status Logic & State Machines
 Implemented Strict Transitions: created state machines for both 
-TaskStatus
- (Backend) and 
-ActivityStatus
- (Backend) to enforce valid workflows (e.g., a task must be assigned before moving to "In Progress").
+TaskStatus (Backend) and 
+ActivityStatus (Backend) to enforce valid workflows (e.g., a task must be assigned before moving to "In Progress").
 Automated Transitions: configured the system so that Assigning a User automatically:
 Moves the Task from Pending to In Progress.
 Creates a Pending User Input activity log entry.
