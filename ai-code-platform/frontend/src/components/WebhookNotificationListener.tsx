@@ -32,11 +32,12 @@ export default function WebhookNotificationListener() {
   const isAuthPage = pathname === '/login' || pathname === '/register'
   const shouldFetch = isAuthenticated && !isAuthPage
 
-  // Poll for new notifications every 5 seconds (only if authenticated and not on auth pages)
+  // Poll for new notifications every 30 seconds (only if authenticated and not on auth pages)
+  // Reduced from 5 seconds to reduce backend load while still providing reasonable real-time updates
   const { data: notifications = [] } = useQuery<Notification[]>({
     queryKey: ['notifications', 'webhook-listener'],
     queryFn: fetchRecentNotifications,
-    refetchInterval: shouldFetch ? 5000 : false, // Poll every 5 seconds only when authenticated
+    refetchInterval: shouldFetch ? 30000 : false, // Poll every 30 seconds only when authenticated
     enabled: shouldFetch && typeof window !== 'undefined', // Only run when authenticated and not on auth pages
     retry: false, // Don't retry on 401 errors
   })

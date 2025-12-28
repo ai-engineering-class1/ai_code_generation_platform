@@ -75,6 +75,10 @@ export default function TaskDetailPage({
   const [manualHandleActivityId, setManualHandleActivityId] = useState<string | null>(null)
   const [manualHandleAction, setManualHandleAction] = useState('')
   const [manualHandleResult, setManualHandleResult] = useState('')
+  const [isAssignAgentModalOpen, setIsAssignAgentModalOpen] = useState(false)
+  const [assignAgentActivityId, setAssignAgentActivityId] = useState<string | null>(null)
+  const [assignAgentPrompts, setAssignAgentPrompts] = useState('')
+  const [assignAgentRepoUrl, setAssignAgentRepoUrl] = useState('')
   const [editFormData, setEditFormData] = useState({
     title: '',
     description: '',
@@ -160,6 +164,15 @@ export default function TaskDetailPage({
     }
   })
 
+  // Fetch all projects for repository dropdown
+  const { data: allProjects = [] } = useQuery({
+    queryKey: ['projects'],
+    queryFn: async () => {
+      const response = await apiClient.get('/projects')
+      return response.data
+    }
+  })
+
   // Fetch users for assignee dropdown
   const { data: users = [] } = useQuery<UserType[]>({
     queryKey: ['users'],
@@ -199,6 +212,39 @@ export default function TaskDetailPage({
         next.add(id)
       }
       return next
+    })
+  }
+
+  // Helper function to convert URLs in text to clickable links
+  const linkifyText = (text: string) => {
+    if (!text) return text
+    
+    // URL regex pattern
+    const urlRegex = /(https?:\/\/[^\s]+)/g
+    const parts = text.split(urlRegex)
+    
+    return parts.map((part, index) => {
+      if (urlRegex.test(part)) {
+        return (
+          <a
+            key={index}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:text-blue-800 underline break-all"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {part}
+          </a>
+        )
+      }
+      // Preserve line breaks
+      return part.split('\n').map((line, lineIndex, array) => (
+        <span key={`${index}-${lineIndex}`}>
+          {line}
+          {lineIndex < array.length - 1 && <br />}
+        </span>
+      ))
     })
   }
 
@@ -324,7 +370,9 @@ export default function TaskDetailPage({
                   <h4 className="flex items-center gap-2 text-blue-700 font-bold text-xs uppercase tracking-wider mb-1">
                     <Zap className="w-3 h-3" /> Action
                   </h4>
-                  <p className="text-gray-800 font-medium">{activity.action || 'No detailed action log.'}</p>
+                  <div className="text-gray-800 font-medium whitespace-pre-wrap">
+                    {linkifyText(activity.action || 'No detailed action log.')}
+                  </div>
                 </div>
 
                 {/* Result */}
@@ -332,7 +380,28 @@ export default function TaskDetailPage({
                   <h4 className="flex items-center gap-2 text-green-700 font-bold text-xs uppercase tracking-wider mb-1">
                     <CheckCircle2 className="w-3 h-3" /> Result
                   </h4>
-                  <p className="text-gray-600 bg-gray-50 p-2 rounded">{activity.result || 'Pending...'}</p>
+                  <div className="text-gray-600 bg-gray-50 p-2 rounded whitespace-pre-wrap">
+                    {linkifyText(activity.result || 'Pending...')}
+                  </div>
+                  
+                  {/* Prompts - Error Summary from GitHub Actions (for failed workflows) */}
+                  {activity.workflow_metadata?.error_summary && (
+                    <div className={`mt-3 pt-3 border-t border-gray-200 ${isActiveSection ? '-mx-4 -mr-6' : ''}`}>
+                      <h4 className={`flex items-center gap-2 text-orange-700 font-bold text-xs uppercase tracking-wider mb-2 ${isActiveSection ? 'px-4 pr-6' : ''}`}>
+                        <FileText className="w-3 h-3" /> Prompts
+                      </h4>
+                      <textarea
+                        defaultValue={activity.workflow_metadata.error_summary}
+                        className="w-full p-3 text-sm font-mono bg-white border border-gray-300 rounded-md resize-y min-h-[100px] focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Error summary from GitHub Actions will appear here..."
+                        rows={6}
+                        readOnly={false}
+                      />
+                      <p className={`text-xs text-gray-500 mt-1 ${isActiveSection ? 'px-4 pr-6' : ''}`}>
+                        Error summary extracted from GitHub Actions. You can edit this to add notes or context.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Tie-back */}
@@ -363,7 +432,16 @@ export default function TaskDetailPage({
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
-                        alert("To be implemented: Agent assignment flow")
+                        // Pre-fill prompts from error_summary or action
+                        const promptsContent = activity.workflow_metadata?.error_summary || activity.action || ''
+                        setAssignAgentPrompts(promptsContent)
+                        setAssignAgentActivityId(activity.id)
+                        // Pre-select current project's repo if available
+                        if (project?.github_repo_url || project?.githubRepoUrl) {
+                          const repoUrl = (project.github_repo_url || project.githubRepoUrl || '').replace(/\.git$/, '')
+                          setAssignAgentRepoUrl(repoUrl)
+                        }
+                        setIsAssignAgentModalOpen(true)
                       }}
                       className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded hover:bg-blue-700 transition"
                     >
@@ -513,6 +591,33 @@ export default function TaskDetailPage({
         setLastSyncedStatus('dispatched') // Initial status
       }
       queryClient.invalidateQueries({ queryKey: ['task', projectId, taskId] })
+      alert(`Task assigned to agent! Remote Task ID: ${activity.workflow_metadata?.remote_task_id}`)
+    },
+    onError: (error: any) => {
+      alert(`Failed to assign to agent: ${error.response?.data?.detail || error.message}`)
+    },
+  })
+
+  // Mutation for Assign Agent from Active Activity (with custom prompts)
+  const assignToAgentCIMutation = useMutation({
+    mutationFn: async ({ prompts, repo_url }: { prompts: string; repo_url: string }) => {
+      const response = await apiClient.post(`/projects/${projectId}/tasks/${taskId}/assign-ci`, {
+        prompts,
+        repo_url
+      })
+      return response.data
+    },
+    onSuccess: (activity) => {
+      if (activity.workflow_metadata?.remote_task_id) {
+        setAgentTaskId(activity.workflow_metadata.remote_task_id)
+        setCurrentActivityId(activity.id)
+        setLastSyncedStatus('dispatched')
+      }
+      queryClient.invalidateQueries({ queryKey: ['task', projectId, taskId] })
+      setIsAssignAgentModalOpen(false)
+      setAssignAgentPrompts('')
+      setAssignAgentRepoUrl('')
+      setAssignAgentActivityId(null)
       alert(`Task assigned to agent! Remote Task ID: ${activity.workflow_metadata?.remote_task_id}`)
     },
     onError: (error: any) => {
@@ -1352,6 +1457,89 @@ export default function TaskDetailPage({
                   className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
                 >
                   Complete Activity
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Assign Agent Modal */}
+      {isAssignAgentModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Assign Agent</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Configure the agent assignment with custom prompts and select the repository.
+            </p>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                if (assignAgentPrompts.trim() && assignAgentRepoUrl.trim()) {
+                  assignToAgentCIMutation.mutate({
+                    prompts: assignAgentPrompts,
+                    repo_url: assignAgentRepoUrl
+                  })
+                }
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  fix:
+                </label>
+                <textarea
+                  value={assignAgentPrompts}
+                  onChange={(e) => setAssignAgentPrompts(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md p-3 h-48 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none resize-y text-sm font-mono"
+                  placeholder="Enter prompts for the agent (e.g., error details, instructions)..."
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Repository
+                </label>
+                <select
+                  value={assignAgentRepoUrl}
+                  onChange={(e) => setAssignAgentRepoUrl(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md p-2 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+                  required
+                >
+                  <option value="">Select a repository...</option>
+                  {allProjects
+                    .filter((p: any) => p.github_repo_url || p.githubRepoUrl)
+                    .map((p: any) => {
+                      const repoUrl = (p.github_repo_url || p.githubRepoUrl || '').replace(/\.git$/, '')
+                      return (
+                        <option key={p.id} value={repoUrl}>
+                          {p.name} - {repoUrl}
+                        </option>
+                      )
+                    })}
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAssignAgentModalOpen(false)
+                    setAssignAgentPrompts('')
+                    setAssignAgentRepoUrl('')
+                    setAssignAgentActivityId(null)
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!assignAgentPrompts.trim() || !assignAgentRepoUrl.trim() || assignToAgentCIMutation.isPending}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {assignToAgentCIMutation.isPending ? 'Assigning...' : 'OK'}
                 </button>
               </div>
             </form>

@@ -153,8 +153,20 @@ def main():
     
     print(f"\nFound {len(webhooks)} webhook(s):")
     for i, hook in enumerate(webhooks, 1):
+        hook_id = hook['id']
         hook_url = hook['config'].get('url', 'N/A')
-        print(f"  {i}. ID: {hook['id']}, URL: {hook_url}")
+        events = hook.get('events', [])
+        active = hook.get('active', True)
+        status = "✓ Active" if active else "✗ Inactive"
+        print(f"  {i}. ID: {hook_id}, URL: {hook_url}")
+        print(f"     Status: {status}")
+        print(f"     Events: {', '.join(events) if events else 'All events'}")
+        
+        # Check if workflow_run is in events
+        if 'workflow_run' in events:
+            print(f"     ✓ workflow_run events are ENABLED")
+        else:
+            print(f"     ⚠️  workflow_run events are NOT enabled - this is why you don't see workflow failures!")
     
     # Get deliveries for each webhook
     print("\n" + "=" * 60)
@@ -174,6 +186,24 @@ def main():
             print("  No deliveries found (webhook may not have been triggered yet)")
         else:
             print(f"\n  Found {len(deliveries)} recent delivery(ies):")
+            
+            # Filter for workflow_run events
+            workflow_run_deliveries = [d for d in deliveries if 
+                (isinstance(d.get('event'), dict) and d.get('event', {}).get('type') == 'workflow_run') or
+                (isinstance(d.get('event'), str) and d.get('event') == 'workflow_run')]
+            
+            if workflow_run_deliveries:
+                print(f"\n  📋 Found {len(workflow_run_deliveries)} workflow_run event(s):")
+                for delivery in workflow_run_deliveries:
+                    print_delivery_summary(delivery)
+            else:
+                print(f"\n  ⚠️  No workflow_run events found in recent deliveries")
+                print(f"     This might mean:")
+                print(f"     1. workflow_run events are not enabled in webhook configuration")
+                print(f"     2. No workflows have run recently")
+                print(f"     3. Workflows ran but webhook wasn't triggered")
+            
+            print(f"\n  All recent deliveries:")
             for delivery in deliveries:
                 print_delivery_summary(delivery)
     

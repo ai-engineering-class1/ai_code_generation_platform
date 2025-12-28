@@ -1,11 +1,41 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Bell, Check, CheckCheck } from 'lucide-react'
+import { Bell, Check, CheckCheck, Clock, X } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import apiClient from '@/lib/api'
 import { Notification } from '@/types'
+
+// Format notification time as relative time (e.g., "2 minutes ago") or absolute time
+const formatNotificationTime = (createdAt: string): string => {
+  const now = new Date()
+  const created = new Date(createdAt)
+  const diffInSeconds = Math.floor((now.getTime() - created.getTime()) / 1000)
+  
+  if (diffInSeconds < 60) {
+    return 'Just now'
+  } else if (diffInSeconds < 3600) {
+    const minutes = Math.floor(diffInSeconds / 60)
+    return `${minutes} minute${minutes > 1 ? 's' : ''} ago`
+  } else if (diffInSeconds < 86400) {
+    const hours = Math.floor(diffInSeconds / 3600)
+    return `${hours} hour${hours > 1 ? 's' : ''} ago`
+  } else if (diffInSeconds < 604800) {
+    const days = Math.floor(diffInSeconds / 86400)
+    return `${days} day${days > 1 ? 's' : ''} ago`
+  } else {
+    // For older notifications, show date and time
+    return created.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: created.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    })
+  }
+}
 
 const fetchNotifications = async (unreadOnly: boolean = false): Promise<Notification[]> => {
   const response = await apiClient.get(`/notifications?unread_only=${unreadOnly}&limit=20`)
@@ -25,6 +55,10 @@ const markAllAsRead = async (notificationIds: string[]): Promise<void> => {
   await apiClient.put('/notifications/mark-read', { notification_ids: notificationIds })
 }
 
+const deleteNotification = async (notificationId: string): Promise<void> => {
+  await apiClient.delete(`/notifications/${notificationId}`)
+}
+
 export default function NotificationBell() {
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -35,7 +69,7 @@ export default function NotificationBell() {
   const { data: unreadCount = 0 } = useQuery<number>({
     queryKey: ['notifications', 'unread-count'],
     queryFn: fetchUnreadCount,
-    refetchInterval: 10000, // Refresh every 10 seconds
+    refetchInterval: 30000, // Refresh every 30 seconds (reduced from 10 seconds)
   })
 
   // Fetch notifications when dropdown is open
@@ -43,7 +77,7 @@ export default function NotificationBell() {
     queryKey: ['notifications', 'list'],
     queryFn: () => fetchNotifications(false),
     enabled: open, // Only fetch when dropdown is open
-    refetchInterval: open ? 5000 : false, // Refresh every 5 seconds when open
+    refetchInterval: open ? 10000 : false, // Refresh every 10 seconds when open (reduced from 5 seconds)
   })
 
   const markReadMutation = useMutation({
@@ -55,6 +89,13 @@ export default function NotificationBell() {
 
   const markAllReadMutation = useMutation({
     mutationFn: markAllAsRead,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    },
+  })
+
+  const deleteNotificationMutation = useMutation({
+    mutationFn: deleteNotification,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notifications'] })
     },
@@ -88,6 +129,13 @@ export default function NotificationBell() {
     const unreadIds = notifications.filter(n => !n.read).map(n => n.id)
     if (unreadIds.length > 0) {
       markAllReadMutation.mutate(unreadIds)
+    }
+  }
+
+  const handleDeleteNotification = (e: React.MouseEvent, notificationId: string) => {
+    e.stopPropagation() // Prevent triggering the notification click
+    if (confirm('Are you sure you want to delete this notification?')) {
+      deleteNotificationMutation.mutate(notificationId)
     }
   }
 
@@ -166,42 +214,57 @@ export default function NotificationBell() {
             ) : (
               <div className="divide-y divide-gray-100">
                 {notifications.map((notification) => (
-                  <button
+                  <div
                     key={notification.id}
-                    type="button"
-                    onClick={() => handleNotificationClick(notification)}
-                    className={`w-full text-left px-4 py-3 hover:bg-gray-50 transition ${
+                    className={`relative group px-4 py-3 hover:bg-gray-50 transition ${
                       !notification.read ? 'bg-blue-50/50' : ''
                     }`}
                   >
-                    <div className="flex items-start space-x-3">
-                      <div className="flex-shrink-0 text-lg">
-                        {getNotificationIcon(notification.type)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between">
-                          <p
-                            className={`text-sm font-medium ${
-                              !notification.read ? 'text-gray-900' : 'text-gray-600'
-                            }`}
-                          >
-                            {notification.title}
-                          </p>
-                          {!notification.read && (
-                            <span className="ml-2 h-2 w-2 flex-shrink-0 rounded-full bg-blue-600" />
-                          )}
+                    <button
+                      type="button"
+                      onClick={() => handleNotificationClick(notification)}
+                      className="w-full text-left"
+                    >
+                      <div className="flex items-start space-x-3">
+                        <div className="flex-shrink-0 text-lg">
+                          {getNotificationIcon(notification.type)}
                         </div>
-                        {notification.message && (
-                          <p className="mt-1 text-sm text-gray-600 line-clamp-2">
-                            {notification.message}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between">
+                            <p
+                              className={`text-sm font-medium ${
+                                !notification.read ? 'text-gray-900' : 'text-gray-600'
+                              }`}
+                            >
+                              {notification.title}
+                            </p>
+                            <div className="flex items-center space-x-2">
+                              {!notification.read && (
+                                <span className="h-2 w-2 flex-shrink-0 rounded-full bg-blue-600" />
+                              )}
+                            </div>
+                          </div>
+                          {notification.message && (
+                            <p className="mt-1 text-sm text-gray-600 line-clamp-2">
+                              {notification.message}
+                            </p>
+                          )}
+                          <p className="mt-1.5 text-xs text-gray-500 font-medium">
+                            {formatNotificationTime(notification.createdAt)}
                           </p>
-                        )}
-                        <p className="mt-1 text-xs text-gray-400">
-                          {new Date(notification.createdAt).toLocaleString()}
-                        </p>
+                        </div>
                       </div>
-                    </div>
-                  </button>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteNotification(e, notification.id)}
+                      className="absolute top-2 right-2 p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition opacity-0 group-hover:opacity-100"
+                      aria-label="Delete notification"
+                      disabled={deleteNotificationMutation.isPending}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
                 ))}
               </div>
             )}

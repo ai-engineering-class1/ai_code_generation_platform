@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Body
 from sqlalchemy.orm import Session, joinedload
 from typing import List
+from pydantic import BaseModel
 from app.core.database import get_db
 from app.core.security import get_current_active_user
 from app.models.user import User
@@ -16,6 +17,11 @@ from app.services.activity_log_service import ActivityLogService
 from app.services.notification_service import notify_task_assigned
 
 router = APIRouter()
+
+
+class AssignAgentCIRequest(BaseModel):
+    prompts: str
+    repo_url: str
 
 
 @router.get("/{project_id}/tasks", response_model=List[TaskResponse])
@@ -397,6 +403,98 @@ async def assign_to_agent(
                 activity_id=activity.id,
                 action=f"Successfully dispatched task to remote agent.\nRemote Task ID: {remote_task_id}.\nPrompt: Please implement the OpenSpec change under openspec/changes\nWaiting for results via polling...",
                 metadata={"remote_task_id": remote_task_id, "remote_status": "dispatched"}
+            )
+            
+            # Return activity so frontend can start polling 'remote_task_id'
+            return activity
+            
+        except Exception as e:
+            # Handle Dispatch Failure
+            activity_service.end_activity(
+                db=db,
+                activity_id=activity.id,
+                result=f"Failed to dispatch to remote agent. Error: {str(e)}",
+                status="failed"
+            )
+            raise HTTPException(status_code=500, detail=str(e))
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.post("/{project_id}/tasks/{task_id}/assign-ci")
+async def assign_to_agent_ci(
+    project_id: str,
+    task_id: str,
+    request: AssignAgentCIRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Assign task to remote Claude Web API agent with custom prompts.
+    
+    Args:
+        project_id: Project ID
+        task_id: Task ID
+        request: Request body containing prompts and repo_url
+    
+    STAR Lifecycle:
+    1. Start Activity (S, T): "Remote Agent Execution", Context = Repo URL.
+    2. Execute: Call Remote Agent API with custom prompts.
+    3. Update Activity (A): "Dispatched to Remote Agent (ID: ...)"
+    """
+    try:
+        prompts = request.prompts
+        repo_url = request.repo_url
+        
+        # 1. Validate Project
+        project = db.query(Project).filter(
+            Project.id == project_id,
+            Project.owner_id == current_user.id
+        ).first()
+
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Clean repo_url (remove .git suffix if present)
+        clean_repo_url = repo_url
+        if clean_repo_url and clean_repo_url.endswith(".git"):
+            clean_repo_url = clean_repo_url[:-4]
+            
+        if not clean_repo_url:
+            raise HTTPException(status_code=400, detail="Repository URL is required.")
+
+        # 2. Init Service
+        activity_service = ActivityLogService()
+        claude_service = ClaudeService()
+
+        # 3. STAR: Start Activity (Situation, Task)
+        activity = activity_service.start_activity(
+            db=db,
+            task_id=task_id,
+            title="Remote Agent Execution (CI)",
+            operator_id="agent-claude-remote",
+            activity_type="agent_execution",
+            situation=f"User initiated remote agent task for repository {clean_repo_url} with custom prompts.",
+            task_role="Implement requested feature and generate code (Remote Agent) with custom instructions."
+        )
+
+        # 4. Execute Remote Call with custom prompts
+        try:
+            result = await claude_service.assign_to_agent_ci(repo_url=clean_repo_url, prompts=prompts)
+            remote_task_id = result.get("taskId")
+            
+            # 5. STAR: Update Activity (Action) with success
+            activity = activity_service.update_activity(
+                db=db,
+                activity_id=activity.id,
+                action=f"Successfully dispatched task to remote agent.\nRemote Task ID: {remote_task_id}.\nPrompt: {prompts[:200]}{'...' if len(prompts) > 200 else ''}\nWaiting for results via polling...",
+                metadata={"remote_task_id": remote_task_id, "remote_status": "dispatched", "custom_prompts": prompts}
             )
             
             # Return activity so frontend can start polling 'remote_task_id'

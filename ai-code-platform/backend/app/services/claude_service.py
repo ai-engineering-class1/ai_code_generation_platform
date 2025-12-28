@@ -181,6 +181,34 @@ Provide your review in a structured format.
             print(f"Error assigning to agent: {e}")
             raise Exception(f"Failed to assign to agent: {str(e)}")
     
+    async def assign_to_agent_ci(self, repo_url: str, prompts: str) -> Dict[str, Any]:
+        """
+        Assign task to remote Claude Web API agent with custom prompts.
+        
+        Args:
+            repo_url: URL of the repository to work on.
+            prompts: Custom prompt text to send to the agent.
+        """
+        CLAUDE_WEB_API_URL = settings.CLAUDE_WEB_API_URL
+        
+        # In future, we might use token: headers={"Authorization": f"Bearer {settings.CLAUDE_WEB_API_TOKEN}"}
+        
+        payload = {
+            "taskType": "feature-implementation",
+            "repoUrl": repo_url,
+            "prompt": prompts,
+            "maxTurns": 25
+        }
+        
+        try:
+            async with httpx.AsyncClient(timeout=float(settings.REMOTE_AGENT_TIMEOUT_SEC)) as client:
+                response = await client.post(f"{CLAUDE_WEB_API_URL}/tasks", json=payload)
+                response.raise_for_status()
+                return response.json()
+        except Exception as e:
+            print(f"Error assigning to agent: {e}")
+            raise Exception(f"Failed to assign to agent: {str(e)}")
+    
     async def get_agent_task(self, task_id: str) -> Dict[str, Any]:
         """Get task status from remote Claude Web API agent"""
         CLAUDE_WEB_API_URL = settings.CLAUDE_WEB_API_URL
