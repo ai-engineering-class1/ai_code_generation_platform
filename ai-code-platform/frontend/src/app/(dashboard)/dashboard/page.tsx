@@ -24,7 +24,7 @@ export default function DashboardPage() {
   const { data: projects, isLoading } = useQuery<Project[]>({
     queryKey: ['projects'],
     queryFn: async () => {
-      const response = await apiClient.get('/projects')
+      const response = await apiClient.get('/projects/')
       return response.data
     },
   })

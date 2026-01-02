@@ -35,7 +35,7 @@ export default function NewProjectPage() {
         jira_project_key: data.jiraProjectKey,
         github_repo_url: data.githubRepoUrl,
       }
-      const response = await apiClient.post('/projects', payload)
+      const response = await apiClient.post('/projects/', payload)
       return response.data
     },
     onSuccess: (data) => {

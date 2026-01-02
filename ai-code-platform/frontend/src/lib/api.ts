@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 const isServer = typeof window === 'undefined'
-console.log('API Client Init:', { isServer, host: isServer ? 'server' : window.location.host })
+
 
 // On client, we want relative path '/api/v1'.
 // On server, we want absolute URL 'http://localhost:8000/api/v1'.

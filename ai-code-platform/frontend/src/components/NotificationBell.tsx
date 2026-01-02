@@ -170,9 +170,8 @@ export default function NotificationBell() {
                     key={notification.id}
                     type="button"
                     onClick={() => handleNotificationClick(notification)}
-                    className={`w-full text-left px-4 py-3 hover:bg-gray-50 transition ${
-                      !notification.read ? 'bg-blue-50/50' : ''
-                    }`}
+                    className={`w-full text-left px-4 py-3 hover:bg-gray-50 transition ${!notification.read ? 'bg-blue-50/50' : ''
+                      }`}
                   >
                     <div className="flex items-start space-x-3">
                       <div className="flex-shrink-0 text-lg">
@@ -181,9 +180,8 @@ export default function NotificationBell() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between">
                           <p
-                            className={`text-sm font-medium ${
-                              !notification.read ? 'text-gray-900' : 'text-gray-600'
-                            }`}
+                            className={`text-sm font-medium ${!notification.read ? 'text-gray-900' : 'text-gray-600'
+                              }`}
                           >
                             {notification.title}
                           </p>
