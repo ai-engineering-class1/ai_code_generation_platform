@@ -17,7 +17,7 @@ services:
       - REDIS_HOST=host.docker.internal
       - REDIS_PORT=4502
       # Ensure CORS allows our new frontend port
-      - CORS_ORIGINS=["http://localhost:4530","http://127.0.0.1:4530","http://localhost:3012","http://103.98.213.149:4530"]
+      - CORS_ORIGINS=["http://localhost:4530","http://127.0.0.1:4530","http://localhost:3012","http://103.98.213.149:4530","https://aicodegen.easiiodev.ai"]
       # Keep other credentials managed by the app's .env or add them here if needed
       - POSTGRES_USER=aicode
       - POSTGRES_PASSWORD=aicode123
@@ -38,7 +38,7 @@ services:
       context: ./frontend
       args:
         # Build-time variable for Next.js to bake in the backend URL
-        NEXT_PUBLIC_API_URL: http://103.98.213.149:4531
+        NEXT_PUBLIC_API_URL: https://aicodegen.easiiodev.ai
     container_name: Lee-ai-code-platform-frontend
     restart: unless-stopped
     ports:
@@ -47,7 +47,7 @@ services:
       - Lee-network
     environment:
       # Runtime override if applicable (though Next.js normally bakes this at build)
-      - NEXT_PUBLIC_API_URL=http://103.98.213.149:4531
+      - NEXT_PUBLIC_API_URL=https://aicodegen.easiiodev.ai
     depends_on:
       - backend
 
