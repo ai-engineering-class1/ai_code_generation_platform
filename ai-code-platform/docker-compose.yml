@@ -39,8 +39,9 @@ services:
     networks:
       - Lee-network
     environment:
-      # Runtime override if applicable (though Next.js normally bakes this at build)
-      - NEXT_PUBLIC_API_URL=https://aicodegen.easiiodev.ai
+      # Runtime override: Set to empty string to force relative paths (browser -> nginx -> backend)
+      # This fixes Mixed Content issues.
+      - NEXT_PUBLIC_API_URL=
     depends_on:
       - backend
 
