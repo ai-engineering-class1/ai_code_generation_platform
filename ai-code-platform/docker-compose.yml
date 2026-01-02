@@ -9,23 +9,16 @@ services:
       - Lee-network
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    env_file:
+      - ./backend/.env
     environment:
-      # Connect to the external database on the host machine
-      - POSTGRES_SERVER=host.docker.internal
-      - POSTGRES_PORT=4501
       # Connect to the external redis on the host machine
       - REDIS_HOST=host.docker.internal
       - REDIS_PORT=4502
       # Ensure CORS allows our new frontend port
       - CORS_ORIGINS=["http://localhost:4530","http://127.0.0.1:4530","http://localhost:3012","http://103.98.213.149:4530","https://aicodegen.easiiodev.ai"]
-      # Keep other credentials managed by the app's .env or add them here if needed
-      - POSTGRES_USER=aicode
-      - POSTGRES_PASSWORD=aicode123
-      - POSTGRES_DB=ai_code_platform
       # Claude CLI Configuration
       - CLAUDE_EXECUTABLE_PATH=claude
-      - ANTHROPIC_AUTH_TOKEN=${ANTHROPIC_AUTH_TOKEN}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ANTHROPIC_BASE_URL=https://open.bigmodel.cn/api/anthropic
       - API_TIMEOUT_MS=600000
       - WORKSPACE_ROOT=/safe_workspace
