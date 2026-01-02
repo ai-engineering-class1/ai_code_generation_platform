@@ -1,6 +1,9 @@
 import axios from 'axios'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const isServer = typeof window === 'undefined'
+const API_URL = isServer
+  ? (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000')
+  : '' // Use relative path on client side (browser) to rely on Nginx proxy
 
 export const apiClient = axios.create({
   baseURL: `${API_URL}/api/v1`,
