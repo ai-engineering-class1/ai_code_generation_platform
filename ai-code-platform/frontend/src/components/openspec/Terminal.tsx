@@ -91,11 +91,16 @@ export default function Terminal({ isOpen, onClose, mode = 'fixed', onStatusChan
             if (!term || ws || !isMounted.current) return;
             safeFit(); // Final measure before connect
 
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            // If we are in the browser, rely on the current host (which goes through Nginx)
-            // Otherwise fallback to env var (though Terminal is client-side only)
-            const host = window.location.host;
-            const wsBaseUrl = `${protocol}//${host}`;
+            let wsBaseUrl = '';
+            // 1. If explicit API URL is set (e.g. Local Dev), use it but replace protocol
+            if (process.env.NEXT_PUBLIC_API_URL) {
+                wsBaseUrl = process.env.NEXT_PUBLIC_API_URL.replace(/^http/, 'ws');
+            }
+            // 2. Otherwise (Production), default to current host (Nginx proxy)
+            else {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                wsBaseUrl = `${protocol}//${window.location.host}`;
+            }
 
             let wsUrl = `${wsBaseUrl}/api/v1/terminal/ws?cols=${term.cols}&rows=${term.rows}`;
 
