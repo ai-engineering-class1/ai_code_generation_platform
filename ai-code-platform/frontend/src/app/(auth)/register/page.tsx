@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
+import apiClient from '@/lib/api'
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -27,28 +28,21 @@ export default function RegisterPage() {
     setLoading(true)
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/register`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: formData.name,
-          email: formData.email,
-          password: formData.password,
-          role: formData.role,
-        }),
+      await apiClient.post('/auth/register', {
+        name: formData.name,
+        email: formData.email,
+        password: formData.password,
+        role: formData.role,
       })
 
-      if (response.ok) {
-        toast.success('Registration successful! Please login.')
-        router.push('/login')
+      toast.success('Registration successful! Please login.')
+      router.push('/login')
+    } catch (error: any) {
+      if (error.response) {
+        toast.error(error.response.data.detail || 'Registration failed')
       } else {
-        const error = await response.json()
-        toast.error(error.detail || 'Registration failed')
+        toast.error('Network error. Please try again.')
       }
-    } catch (error) {
-      toast.error('Network error. Please try again.')
     } finally {
       setLoading(false)
     }
