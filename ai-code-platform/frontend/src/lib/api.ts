@@ -1,9 +1,10 @@
 import axios from 'axios'
 
 const isServer = typeof window === 'undefined'
+console.log('API Client Init:', { isServer, host: isServer ? 'server' : window.location.host })
 const API_URL = isServer
   ? (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000')
-  : '' // Use relative path on client side (browser) to rely on Nginx proxy
+  : '/' // Use root relative path
 
 export const apiClient = axios.create({
   baseURL: `${API_URL}/api/v1`,
