@@ -92,10 +92,12 @@ export default function Terminal({ isOpen, onClose, mode = 'fixed', onStatusChan
             safeFit(); // Final measure before connect
 
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            let apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-            apiBase = apiBase.replace(/\/$/, '');
+            // If we are in the browser, rely on the current host (which goes through Nginx)
+            // Otherwise fallback to env var (though Terminal is client-side only)
+            const host = window.location.host;
+            const wsBaseUrl = `${protocol}//${host}`;
 
-            let wsUrl = apiBase.replace(/^http/, 'ws') + `/api/v1/terminal/ws?cols=${term.cols}&rows=${term.rows}`;
+            let wsUrl = `${wsBaseUrl}/api/v1/terminal/ws?cols=${term.cols}&rows=${term.rows}`;
 
             // Append additional query params (e.g. activityId)
             if (queryParams) {

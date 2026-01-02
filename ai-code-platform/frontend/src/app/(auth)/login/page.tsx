@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
+import apiClient from '@/lib/api'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -18,25 +19,18 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      })
+      const response = await apiClient.post('/auth/login', formData)
+      const data = response.data
 
-      if (response.ok) {
-        const data = await response.json()
-        localStorage.setItem('token', data.access_token)
-        toast.success('Login successful!')
-        router.push('/dashboard')
+      localStorage.setItem('token', data.access_token)
+      toast.success('Login successful!')
+      router.push('/dashboard')
+    } catch (error: any) {
+      if (error.response) {
+        toast.error(error.response.data.detail || 'Login failed')
       } else {
-        const error = await response.json()
-        toast.error(error.detail || 'Login failed')
+        toast.error('Network error. Please try again.')
       }
-    } catch (error) {
-      toast.error('Network error. Please try again.')
     } finally {
       setLoading(false)
     }
