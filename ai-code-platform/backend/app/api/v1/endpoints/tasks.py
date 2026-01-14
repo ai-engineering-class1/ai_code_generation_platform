@@ -1,6 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session, joinedload
 from typing import List
+from urllib.parse import urlparse
+import httpx
+import logging
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import get_current_active_user
 from app.models.user import User
@@ -485,6 +489,10 @@ async def assign_to_agent(
 
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
+
+        task = db.query(Task).filter(Task.id == task_id, Task.project_id == project_id).first()
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
             
         repo_url = project.github_repo_url
         if repo_url and repo_url.endswith(".git"):
@@ -506,6 +514,13 @@ async def assign_to_agent(
         # 2. Init Service
         activity_service = ActivityLogService()
         claude_service = ClaudeService()
+
+        # 2a. Seed openspec/changes in the repo so the remote agent can find the spec.
+        try:
+            await _ensure_openspec_change(project, task=task, db=db)
+        except Exception as e:
+            # Non-blocking; log and continue
+            print(f"Warning: failed to seed OpenSpec before remote agent dispatch: {e}")
 
         # Handle Source Activity (if transferring from an existing activity)
         if source_activity_id:
@@ -578,6 +593,89 @@ async def assign_to_agent(
         )
 
 
+def _parse_owner_repo(repo_url: str):
+    """Extract owner and repo from a GitHub URL or owner/repo string."""
+    parsed = urlparse(repo_url)
+    path = parsed.path or repo_url
+    parts = path.strip("/").split("/")
+    if len(parts) >= 2:
+        owner = parts[0]
+        repo = parts[1].replace(".git", "")
+        return owner, repo
+    raise ValueError(f"Invalid repository URL: {repo_url}")
+
+
+async def _ensure_openspec_change(project: Project, task: Task, db: Session):
+    """
+    Ensure an openspec/changes entry exists in the repo before dispatching to the remote agent.
+    Uses the code-generation-platform proxy (/push-changes) to commit a stub spec if missing.
+    """
+    if not project.github_repo_url:
+        return
+
+    try:
+        owner, repo = _parse_owner_repo(project.github_repo_url)
+    except Exception as e:
+        print(f"Skipping OpenSpec seed due to repo parse error: {e}")
+        return
+
+    # Prefer the latest saved specification, fall back to task details
+    spec = (
+        db.query(Specification)
+        .filter(Specification.task_id == task.id)
+        .order_by(Specification.version.desc())
+        .first()
+    )
+
+    content = spec.content if spec else f"""# {task.title}
+
+{task.description or 'No description provided.'}
+
+## Acceptance Criteria
+- [ ] Fill in acceptance criteria
+
+## Notes
+- Generated automatically to seed openspec/changes for remote agent."""
+
+    files = [
+        {
+            "path": f"openspec/changes/{task.id}/spec.md",
+            "content": content,
+            "encoding": "utf-8",
+        }
+    ]
+
+    payload = {
+        "owner": owner,
+        "repo": repo,
+        "commitMessage": f"Add OpenSpec stub for task {task.title}",
+        "files": files,
+        "branch": "main",
+        "parentBranch": "main",
+    }
+
+    try:
+        print(f"[OpenSpec seed] Seeding task {task.id} to {owner}/{repo} via {settings.CODEGEN_API_URL}")
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(f"{settings.CODEGEN_API_URL}/push-changes", json=payload)
+            if resp.status_code >= 400:
+                print(f"[OpenSpec seed] push-changes failed: {resp.status_code} {resp.text}")
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="Failed to seed openspec/changes in GitHub before dispatching agent."
+                )
+            print(f"[OpenSpec seed] Seeded openspec/changes for task {task.id} in {owner}/{repo}")
+    except Exception as e:
+        # Block dispatch if we cannot guarantee the spec exists
+        print(f"[OpenSpec seed] Error seeding openspec/changes for task {task.id}: {e}")
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to seed openspec/changes: {str(e)}"
+        )
+
+
 @router.get("/agent-tasks/{agent_task_id}")
 async def get_agent_task(
     agent_task_id: str,
@@ -593,4 +691,3 @@ async def get_agent_task(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
-
