@@ -42,6 +42,7 @@ class JiraConfigResponse(JiraConfigBase):
 class GitHubConfigBase(CamelCaseModel):
     repo_owner: str = Field(..., alias="repoOwner")
     repo_name: str = Field(..., alias="repoName")
+    auth_method: Optional[str] = Field("token", alias="authMethod")
     branch_prefix: Optional[str] = Field("ai-generated", alias="branchPrefix")
     auto_merge: Optional[bool] = Field(False, alias="autoMerge")
 
@@ -49,12 +50,19 @@ class GitHubConfigBase(CamelCaseModel):
 class GitHubConfigCreate(GitHubConfigBase):
     project_id: str = Field(..., alias="projectId")
     access_token: Optional[str] = Field(None, alias="accessToken")
+    github_app_id: Optional[str] = Field(None, alias="githubAppId")
+    github_app_installation_id: Optional[str] = Field(None, alias="githubAppInstallationId")
+    github_app_private_key: Optional[str] = Field(None, alias="githubAppPrivateKey")
 
 
 class GitHubConfigUpdate(CamelCaseModel):
     repo_owner: Optional[str] = Field(None, alias="repoOwner")
     repo_name: Optional[str] = Field(None, alias="repoName")
+    auth_method: Optional[str] = Field(None, alias="authMethod")
     access_token: Optional[str] = Field(None, alias="accessToken")
+    github_app_id: Optional[str] = Field(None, alias="githubAppId")
+    github_app_installation_id: Optional[str] = Field(None, alias="githubAppInstallationId")
+    github_app_private_key: Optional[str] = Field(None, alias="githubAppPrivateKey")
     branch_prefix: Optional[str] = Field(None, alias="branchPrefix")
     auto_merge: Optional[bool] = Field(None, alias="autoMerge")
 
@@ -62,6 +70,10 @@ class GitHubConfigUpdate(CamelCaseModel):
 class GitHubConfigResponse(GitHubConfigBase):
     id: str
     project_id: str = Field(..., alias="projectId")
+    github_app_id: Optional[str] = Field(None, alias="githubAppId")
+    github_app_installation_id: Optional[str] = Field(None, alias="githubAppInstallationId")
+    has_access_token: Optional[bool] = Field(False, alias="hasAccessToken")
+    has_github_app_private_key: Optional[bool] = Field(False, alias="hasGithubAppPrivateKey")
     created_at: datetime = Field(..., alias="createdAt")
     updated_at: Optional[datetime] = Field(None, alias="updatedAt")
 

@@ -69,6 +69,11 @@ export interface GitHubConfiguration {
   projectId: string
   repoOwner: string
   repoName: string
+  authMethod?: 'token' | 'app'
+  githubAppId?: string
+  githubAppInstallationId?: string
+  hasAccessToken?: boolean
+  hasGithubAppPrivateKey?: boolean
   branchPrefix: string
   autoMerge: boolean
   createdAt: string
@@ -199,7 +204,11 @@ export interface ConfigureJiraData {
 export interface ConfigureGitHubData {
   repoOwner: string
   repoName: string
-  accessToken: string
+  authMethod?: 'token' | 'app'
+  accessToken?: string
+  githubAppId?: string
+  githubAppInstallationId?: string
+  githubAppPrivateKey?: string
   branchPrefix?: string
   autoMerge?: boolean
 }

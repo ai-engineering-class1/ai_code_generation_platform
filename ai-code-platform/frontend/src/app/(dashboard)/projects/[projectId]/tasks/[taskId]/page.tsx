@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import { ArrowLeft, Clock, User, FileText, GitPullRequest, CheckCircle2, AlertCircle, X, Bot, DollarSign, Timer, Zap, Edit, ChevronDown, ChevronUp, Search, Filter, Calendar, Database } from 'lucide-react'
@@ -44,6 +44,7 @@ export default function TaskDetailPage({
   params: { projectId: string; taskId: string }
 }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { projectId, taskId } = params
 
   // Check authentication
@@ -60,6 +61,14 @@ export default function TaskDetailPage({
   const [currentActivityId, setCurrentActivityId] = useState<string | null>(null)
   const [lastSyncedStatus, setLastSyncedStatus] = useState<string | null>(null)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+
+  // If navigated here via an "Edit" action (e.g. from TaskCard), open edit modal automatically.
+  useEffect(() => {
+    const edit = searchParams.get('edit')
+    if (edit === '1' || edit === 'true') {
+      setIsEditModalOpen(true)
+    }
+  }, [searchParams])
 
   const [editFormData, setEditFormData] = useState({
     title: '',

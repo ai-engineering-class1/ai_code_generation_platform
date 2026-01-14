@@ -77,7 +77,11 @@ export default function ProjectSettingsPage({ params }: { params: { projectId: s
     repoUrl: '',
     repoOwner: '',
     repoName: '',
+    authMethod: 'token' as 'token' | 'app',
     accessToken: '',
+    githubAppId: '',
+    githubAppInstallationId: '',
+    githubAppPrivateKey: '',
     branchPrefix: 'ai-generated',
     autoMerge: false,
   })
@@ -155,7 +159,11 @@ export default function ProjectSettingsPage({ params }: { params: { projectId: s
         repoUrl: `https://github.com/${githubConfig.repoOwner}/${githubConfig.repoName}`,
         repoOwner: githubConfig.repoOwner,
         repoName: githubConfig.repoName,
+        authMethod: (githubConfig.authMethod || 'token') as 'token' | 'app',
         accessToken: '', // Don't show existing token
+        githubAppId: githubConfig.githubAppId || '',
+        githubAppInstallationId: githubConfig.githubAppInstallationId || '',
+        githubAppPrivateKey: '', // Don't show existing private key
         branchPrefix: githubConfig.branchPrefix,
         autoMerge: githubConfig.autoMerge,
       })
@@ -308,17 +316,32 @@ export default function ProjectSettingsPage({ params }: { params: { projectId: s
       return;
     }
 
-    // Build payload - only include accessToken if it's provided
+    // Build payload - include auth details depending on authMethod
     const payload: any = {
       repoOwner: owner,
       repoName: repo,
+      authMethod: githubData.authMethod,
       branchPrefix: githubData.branchPrefix,
       autoMerge: githubData.autoMerge,
     }
 
-    // Only include accessToken if it's provided
-    if (githubData.accessToken) {
-      payload.accessToken = githubData.accessToken
+    if (githubData.authMethod === 'token') {
+      if (githubData.accessToken) payload.accessToken = githubData.accessToken
+      if (!githubConfig && !githubData.accessToken) {
+        alert('Please provide a GitHub token (or switch to GitHub App auth).')
+        return
+      }
+    } else {
+      if (githubData.githubAppId) payload.githubAppId = githubData.githubAppId
+      if (githubData.githubAppInstallationId) payload.githubAppInstallationId = githubData.githubAppInstallationId
+      if (githubData.githubAppPrivateKey) payload.githubAppPrivateKey = githubData.githubAppPrivateKey
+      if (
+        !githubConfig &&
+        (!githubData.githubAppId || !githubData.githubAppInstallationId || !githubData.githubAppPrivateKey)
+      ) {
+        alert('Please provide GitHub App ID, Installation ID, and Private Key (or switch to token auth).')
+        return
+      }
     }
 
     configureGitHubMutation.mutate(payload)
@@ -712,6 +735,119 @@ export default function ProjectSettingsPage({ params }: { params: { projectId: s
                     You can configure GitHub integration later in project settings
                   </p>
                 </div>
+
+                <div className="rounded-lg border border-gray-200 bg-white p-4">
+                  <p className="text-sm font-medium text-gray-900 mb-3">Authentication Method</p>
+                  <div className="flex items-center gap-6">
+                    <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                      <input
+                        type="radio"
+                        name="githubAuthMethod"
+                        value="token"
+                        checked={githubData.authMethod === 'token'}
+                        onChange={() => setGithubData({ ...githubData, authMethod: 'token' })}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                      />
+                      Token (PAT / fine-grained token)
+                    </label>
+                    <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                      <input
+                        type="radio"
+                        name="githubAuthMethod"
+                        value="app"
+                        checked={githubData.authMethod === 'app'}
+                        onChange={() => setGithubData({ ...githubData, authMethod: 'app' })}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                      />
+                      GitHub App
+                    </label>
+                  </div>
+                </div>
+
+                {githubData.authMethod === 'token' && (
+                  <div>
+                    <label htmlFor="githubAccessToken" className="block text-sm font-medium text-gray-700 mb-2">
+                      GitHub Token {githubConfig && '(Leave empty to keep existing)'}
+                    </label>
+                    {githubConfig?.hasAccessToken && (
+                      <div className="mb-2 p-2 bg-green-50 border border-green-200 rounded-md">
+                        <p className="text-sm text-green-800 flex items-center">
+                          <CheckCircle2 className="h-4 w-4 mr-1" />
+                          Token is saved (hidden for security)
+                        </p>
+                      </div>
+                    )}
+                    <input
+                      type="password"
+                      id="githubAccessToken"
+                      required={!githubConfig}
+                      value={githubData.accessToken}
+                      onChange={(e) => setGithubData({ ...githubData, accessToken: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                      placeholder={githubConfig ? "Enter new token to update" : "Your GitHub token"}
+                    />
+                    {githubConfig && (
+                      <p className="mt-1 text-sm text-gray-500">
+                        Leave empty to keep the existing token, or enter a new one to update it
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {githubData.authMethod === 'app' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label htmlFor="githubAppId" className="block text-sm font-medium text-gray-700 mb-2">
+                        GitHub App ID * {githubConfig && '(Leave empty to keep existing)'}
+                      </label>
+                      <input
+                        type="text"
+                        id="githubAppId"
+                        required={!githubConfig}
+                        value={githubData.githubAppId}
+                        onChange={(e) => setGithubData({ ...githubData, githubAppId: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="e.g. 123456"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="githubAppInstallationId" className="block text-sm font-medium text-gray-700 mb-2">
+                        GitHub App Installation ID * {githubConfig && '(Leave empty to keep existing)'}
+                      </label>
+                      <input
+                        type="text"
+                        id="githubAppInstallationId"
+                        required={!githubConfig}
+                        value={githubData.githubAppInstallationId}
+                        onChange={(e) => setGithubData({ ...githubData, githubAppInstallationId: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="e.g. 987654321"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="githubAppPrivateKey" className="block text-sm font-medium text-gray-700 mb-2">
+                        GitHub App Private Key (PEM) * {githubConfig && '(Leave empty to keep existing)'}
+                      </label>
+                      {githubConfig?.hasGithubAppPrivateKey && (
+                        <div className="mb-2 p-2 bg-green-50 border border-green-200 rounded-md">
+                          <p className="text-sm text-green-800 flex items-center">
+                            <CheckCircle2 className="h-4 w-4 mr-1" />
+                            Private key is saved (hidden for security)
+                          </p>
+                        </div>
+                      )}
+                      <textarea
+                        id="githubAppPrivateKey"
+                        rows={6}
+                        required={!githubConfig}
+                        value={githubData.githubAppPrivateKey}
+                        onChange={(e) => setGithubData({ ...githubData, githubAppPrivateKey: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 font-mono text-xs"
+                        placeholder={githubConfig ? "Paste new PEM to update (optional)" : "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"}
+                      />
+                    </div>
+                  </div>
+                )}
 
 
 

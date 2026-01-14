@@ -70,6 +70,38 @@ def update_schema():
         except Exception as e:
             print(f"Error checking/updating workflow_metadata: {e}")
 
+        # Check / add new GitHub configuration auth columns
+        try:
+            print("\nChecking new columns for github_configurations...")
+            result = conn.execute(text("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name='github_configurations'
+            """))
+            existing_columns = [row[0] for row in result.fetchall()]
+
+            github_new_columns = {
+                'auth_method': "VARCHAR(20) NOT NULL DEFAULT 'token'",
+                'github_app_id': 'VARCHAR(50)',
+                'github_app_installation_id': 'VARCHAR(50)',
+                'github_app_private_key': 'TEXT',
+            }
+
+            for col_name, col_type in github_new_columns.items():
+                if col_name not in existing_columns:
+                    print(f"Adding column {col_name} to github_configurations...")
+                    conn.execute(text(f"""
+                        ALTER TABLE github_configurations
+                        ADD COLUMN {col_name} {col_type}
+                    """))
+                    print(f"✓ {col_name} added")
+                else:
+                    print(f"✓ {col_name} already exists")
+
+            conn.commit()
+        except Exception as e:
+            print(f"Error checking/updating github_configurations: {e}")
+
         # Add new columns for TaskWorkflowHistory
         new_columns = {
             'operator_id': 'VARCHAR',
