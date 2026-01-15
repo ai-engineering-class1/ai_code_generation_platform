@@ -31,7 +31,15 @@ class GitHubConfiguration(Base):
     project_id = Column(String, ForeignKey("projects.id"), nullable=False)
     repo_owner = Column(String(255), nullable=False)
     repo_name = Column(String(255), nullable=False)
+    # Auth
+    # - token: Personal Access Token / fine-grained token stored per project
+    # - app: GitHub App (App ID + Installation ID + Private Key PEM)
+    auth_method = Column(String(20), nullable=False, default="token")
     access_token = Column(Text)  # Encrypted in production
+    github_app_id = Column(String(50))
+    github_app_installation_id = Column(String(50))
+    github_app_private_key = Column(Text)  # Encrypted in production
+
     branch_prefix = Column(String(50), default="ai-generated")
     auto_merge = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -39,4 +47,12 @@ class GitHubConfiguration(Base):
     
     # Relationships
     # project = relationship("Project", back_populates="github_config")
+
+    @property
+    def has_access_token(self) -> bool:
+        return bool(self.access_token)
+
+    @property
+    def has_github_app_private_key(self) -> bool:
+        return bool(self.github_app_private_key)
 

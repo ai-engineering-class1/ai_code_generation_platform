@@ -1,4 +1,7 @@
 import httpx
+import time
+import calendar
+import jwt
 from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
 from app.models.integration import GitHubConfiguration
@@ -10,10 +13,81 @@ class GitHubService:
     def __init__(self, config: GitHubConfiguration):
         self.config = config
         self.base_url = "https://api.github.com"
-        self.headers = {
-            "Authorization": f"token {config.access_token}",
-            "Accept": "application/vnd.github.v3+json"
+        self._installation_token: Optional[str] = None
+        self._installation_token_exp: Optional[int] = None
+
+    async def _get_headers(self) -> Dict[str, str]:
+        headers = {
+            "Accept": "application/vnd.github.v3+json",
+            "X-GitHub-Api-Version": "2022-11-28",
         }
+
+        auth_method = (getattr(self.config, "auth_method", None) or "token").strip().lower()
+        if auth_method == "app":
+            token = await self._get_installation_token()
+            headers["Authorization"] = f"token {token}"
+            return headers
+
+        # Default: token
+        if not self.config.access_token:
+            raise ValueError("GitHub access token is not configured for this project")
+        headers["Authorization"] = f"token {self.config.access_token}"
+        return headers
+
+    async def _get_installation_token(self) -> str:
+        """
+        Create/refresh a GitHub App installation access token.
+        Requires: github_app_id, github_app_installation_id, github_app_private_key (PEM).
+        """
+        # Reuse cached token if still valid (with some buffer)
+        now = int(time.time())
+        if self._installation_token and self._installation_token_exp and (now + 30) < self._installation_token_exp:
+            return self._installation_token
+
+        app_id = (self.config.github_app_id or "").strip()
+        installation_id = (self.config.github_app_installation_id or "").strip()
+        private_key = self.config.github_app_private_key
+        if not app_id or not installation_id or not private_key:
+            raise ValueError("GitHub App credentials are not fully configured for this project")
+
+        # GitHub requires exp <= 10 minutes
+        jwt_payload = {
+            "iat": now - 60,
+            "exp": now + 9 * 60,
+            "iss": app_id,
+        }
+        app_jwt = jwt.encode(jwt_payload, private_key, algorithm="RS256")
+
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{self.base_url}/app/installations/{installation_id}/access_tokens",
+                headers={
+                    "Authorization": f"Bearer {app_jwt}",
+                    "Accept": "application/vnd.github.v3+json",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                },
+            )
+            if resp.status_code not in (200, 201):
+                raise ValueError(f"Failed to mint GitHub App installation token: {resp.status_code} {resp.text}")
+
+            data = resp.json()
+            token = data.get("token")
+            expires_at = data.get("expires_at")  # ISO8601 string
+            if not token:
+                raise ValueError("GitHub App installation token response missing token")
+
+            # Best-effort parse expires_at; if parsing fails, keep short TTL.
+            exp_ts = now + 8 * 60
+            try:
+                # '2021-01-01T00:00:00Z'
+                if isinstance(expires_at, str) and expires_at.endswith("Z"):
+                    exp_ts = int(calendar.timegm(time.strptime(expires_at, "%Y-%m-%dT%H:%M:%SZ")))
+            except Exception:
+                pass
+
+            self._installation_token = token
+            self._installation_token_exp = exp_ts
+            return token
     
     async def test_connection(self) -> bool:
         """Test GitHub API connection"""
@@ -21,7 +95,7 @@ class GitHubService:
             async with httpx.AsyncClient() as client:
                 response = await client.get(
                     f"{self.base_url}/user",
-                    headers=self.headers
+                    headers=await self._get_headers()
                 )
                 return response.status_code == 200
         except Exception as e:
@@ -35,7 +109,7 @@ class GitHubService:
                 # Get base branch SHA
                 base_response = await client.get(
                     f"{self.base_url}/repos/{self.config.repo_owner}/{self.config.repo_name}/git/refs/heads/{base_branch}",
-                    headers=self.headers
+                    headers=await self._get_headers()
                 )
                 
                 if base_response.status_code != 200:
@@ -46,7 +120,7 @@ class GitHubService:
                 # Create new branch
                 create_response = await client.post(
                     f"{self.base_url}/repos/{self.config.repo_owner}/{self.config.repo_name}/git/refs",
-                    headers=self.headers,
+                    headers=await self._get_headers(),
                     json={
                         "ref": f"refs/heads/{branch_name}",
                         "sha": base_sha
@@ -64,7 +138,7 @@ class GitHubService:
             async with httpx.AsyncClient() as client:
                 response = await client.put(
                     f"{self.base_url}/repos/{self.config.repo_owner}/{self.config.repo_name}/contents/{file_path}",
-                    headers=self.headers,
+                    headers=await self._get_headers(),
                     json={
                         "message": message,
                         "content": content,  # Base64 encoded
@@ -89,7 +163,7 @@ class GitHubService:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     f"{self.base_url}/repos/{self.config.repo_owner}/{self.config.repo_name}/pulls",
-                    headers=self.headers,
+                    headers=await self._get_headers(),
                     json={
                         "title": title,
                         "body": body,
@@ -119,7 +193,7 @@ class GitHubService:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     f"{self.base_url}/repos/{self.config.repo_owner}/{self.config.repo_name}/actions/workflows/{workflow_file}/dispatches",
-                    headers=self.headers,
+                    headers=await self._get_headers(),
                     json={
                         "ref": branch,
                         "inputs": inputs

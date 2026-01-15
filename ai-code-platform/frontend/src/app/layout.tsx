@@ -8,6 +8,9 @@ const inter = Inter({ subsets: ['latin'] })
 export const metadata: Metadata = {
   title: 'AI Code Generation Platform',
   description: 'Automate your software development with AI-powered code generation',
+  icons: {
+    icon: '/icon.svg',
+  },
 }
 
 export default function RootLayout({

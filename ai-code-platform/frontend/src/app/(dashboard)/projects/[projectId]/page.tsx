@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
-import { ArrowLeft, Settings, Plus, Activity, CheckCircle2, CalendarDays, Clock9, PlayCircle, Rocket, ExternalLink } from 'lucide-react'
+import { ArrowLeft, Settings, Plus, Activity, CheckCircle2, CalendarDays, Clock9, PlayCircle, Rocket, ExternalLink, Pencil, Trash2 } from 'lucide-react'
 import apiClient from '@/lib/api'
 import { Project, Task, ProjectProgress, JiraConfiguration, GitHubConfiguration } from '@/types'
 import { OpenSpecProject } from '@/lib/types/openspec'
@@ -435,15 +435,38 @@ function StatCard({ title, value, icon }: { title: string; value: number; icon: 
 }
 
 function TaskCard({ task, projectId, jiraConfig }: { task: Task; projectId: string; jiraConfig?: JiraConfiguration }) {
+  const router = useRouter()
+  const queryClient = useQueryClient()
+
+  const deleteTaskMutation = useMutation({
+    mutationFn: async () => {
+      await apiClient.delete(`/projects/${projectId}/tasks/${task.id}`)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks', projectId] })
+      alert('Task deleted.')
+    },
+    onError: (error: any) => {
+      alert(`Failed to delete task: ${error.response?.data?.detail || error.message}`)
+    },
+  })
+
   // Helper function to get Jira issue URL
   const getJiraIssueUrl = (jiraIssueKey: string, jiraConfig: JiraConfiguration): string | null => {
     if (!jiraConfig?.jiraUrl || !jiraIssueKey) return null
+
+    // Basic sanity check: only treat real Jira issue keys as linkable.
+    // Prevents accidental strings like "EW" from hijacking the card click.
+    const looksLikeIssueKey = /^[A-Z][A-Z0-9]+-\d+$/.test(jiraIssueKey.trim())
+    if (!looksLikeIssueKey) return null
 
     let baseUrl = jiraConfig.jiraUrl.trim()
     baseUrl = baseUrl.replace(/\/$/, '') // Remove trailing slash
     try {
       const urlObj = new URL(baseUrl)
       baseUrl = `${urlObj.protocol}//${urlObj.hostname}`
+      // Guard against obvious misconfiguration (e.g. github.com)
+      if (urlObj.hostname.includes('github.com')) return null
     } catch (e) {
       const match = baseUrl.match(/https?:\/\/[^\/]+/)
       if (match) {
@@ -456,53 +479,10 @@ function TaskCard({ task, projectId, jiraConfig }: { task: Task; projectId: stri
   }
 
   const jiraIssueUrl = task.jiraIssueKey && jiraConfig ? getJiraIssueUrl(task.jiraIssueKey, jiraConfig) : null
-  const cardHref = jiraIssueUrl || `/projects/${projectId}/tasks/${task.id}`
-
-  // Use regular anchor for Jira (external), Link for internal tasks
-  if (jiraIssueUrl) {
-    return (
-      <a
-        href={cardHref}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="block border border-gray-200 rounded-lg p-4 hover:border-blue-500 hover:shadow-md transition"
-      >
-        <div className="flex items-start justify-between mb-2">
-          <div className="flex-1">
-            <div className="flex items-center space-x-2 mb-1">
-              <h3 className="font-semibold text-gray-900">
-                {task.title}
-              </h3>
-              {task.jiraIssueKey && (
-                <span className="text-xs text-blue-600 font-medium">
-                  ({task.jiraIssueKey})
-                </span>
-              )}
-            </div>
-            <p className="text-sm text-gray-600 line-clamp-2">{task.description}</p>
-          </div>
-          <div className="flex items-center space-x-2 ml-4">
-            <div className="flex flex-col items-end space-y-2">
-              <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(task.status)}`}>
-                {task.status}
-              </span>
-              <span className={`px-2 py-1 text-xs rounded-full ${getPriorityColor(task.priority)}`}>
-                {task.priority}
-              </span>
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center justify-between text-xs text-gray-500">
-          <span>{task.type}</span>
-          <span>{task.currentStage?.replace(/_/g, ' ') || 'N/A'}</span>
-        </div>
-      </a>
-    )
-  }
 
   return (
     <Link
-      href={cardHref}
+      href={`/projects/${projectId}/tasks/${task.id}`}
       className="block border border-gray-200 rounded-lg p-4 hover:border-blue-500 hover:shadow-md transition"
     >
       <div className="flex items-start justify-between mb-2">
@@ -520,6 +500,50 @@ function TaskCard({ task, projectId, jiraConfig }: { task: Task; projectId: stri
           <p className="text-sm text-gray-600 line-clamp-2">{task.description}</p>
         </div>
         <div className="flex items-center space-x-2 ml-4">
+          <button
+            type="button"
+            title="Edit task"
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              router.push(`/projects/${projectId}/tasks/${task.id}?edit=1`)
+            }}
+            className="inline-flex items-center justify-center rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+
+          <button
+            type="button"
+            title="Delete task"
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              if (deleteTaskMutation.isPending) return
+              const ok = window.confirm(`Delete task "${task.title}"? This cannot be undone.`)
+              if (!ok) return
+              deleteTaskMutation.mutate()
+            }}
+            className="inline-flex items-center justify-center rounded-md border border-red-200 bg-white px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50"
+            disabled={deleteTaskMutation.isPending}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+
+          {jiraIssueUrl && (
+            <button
+              type="button"
+              title="Open in Jira"
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                window.open(jiraIssueUrl, '_blank', 'noopener,noreferrer')
+              }}
+              className="inline-flex items-center justify-center rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+            </button>
+          )}
           <div className="flex flex-col items-end space-y-2">
             <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(task.status)}`}>
               {task.status}

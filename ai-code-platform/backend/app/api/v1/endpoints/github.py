@@ -138,23 +138,88 @@ async def create_github_config(
             detail="Project not found"
         )
     
-    # Check if config already exists
+    # Check if config already exists - update if it does, create if it doesn't
     existing_config = db.query(GitHubConfiguration).filter(
         GitHubConfiguration.project_id == config_data.project_id
     ).first()
     
-    if existing_config:
+    incoming = config_data.model_dump(exclude_unset=True)
+
+    # Normalize auth method
+    auth_method = (incoming.get("auth_method") or "token").strip().lower()
+    if auth_method not in {"token", "app"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="GitHub configuration already exists for this project"
+            detail="authMethod must be either 'token' or 'app'"
         )
-    
-    # Create new config
-    new_config = GitHubConfiguration(**config_data.dict())
+    incoming["auth_method"] = auth_method
+
+    def _has_token_payload(payload: dict) -> bool:
+        token = payload.get("access_token")
+        return bool(token and str(token).strip())
+
+    def _has_app_payload(payload: dict) -> bool:
+        return bool(
+            (payload.get("github_app_id") and str(payload.get("github_app_id")).strip())
+            and (payload.get("github_app_installation_id") and str(payload.get("github_app_installation_id")).strip())
+            and (payload.get("github_app_private_key") and str(payload.get("github_app_private_key")).strip())
+        )
+
+    if existing_config:
+        # Update existing config
+        # Don't overwrite secrets unless provided
+        if not _has_token_payload(incoming):
+            incoming.pop("access_token", None)
+        if not (incoming.get("github_app_id") and str(incoming.get("github_app_id")).strip()):
+            incoming.pop("github_app_id", None)
+        if not (incoming.get("github_app_installation_id") and str(incoming.get("github_app_installation_id")).strip()):
+            incoming.pop("github_app_installation_id", None)
+        if not (incoming.get("github_app_private_key") and str(incoming.get("github_app_private_key")).strip()):
+            incoming.pop("github_app_private_key", None)
+
+        for field, value in incoming.items():
+            setattr(existing_config, field, value)
+
+        # Validate resulting config (after update)
+        if existing_config.auth_method == "token" and not existing_config.access_token:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="GitHub token auth selected but no access token is set"
+            )
+        if existing_config.auth_method == "app":
+            missing = []
+            if not existing_config.github_app_id:
+                missing.append("githubAppId")
+            if not existing_config.github_app_installation_id:
+                missing.append("githubAppInstallationId")
+            if not existing_config.github_app_private_key:
+                missing.append("githubAppPrivateKey")
+            if missing:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"GitHub App auth selected but missing: {', '.join(missing)}"
+                )
+
+        db.commit()
+        db.refresh(existing_config)
+        return existing_config
+
+    # Creating new config: must provide either token or full app creds
+    if auth_method == "token" and not _has_token_payload(incoming):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="accessToken is required when authMethod is 'token'"
+        )
+    if auth_method == "app" and not _has_app_payload(incoming):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="githubAppId, githubAppInstallationId, and githubAppPrivateKey are required when authMethod is 'app'"
+        )
+
+    new_config = GitHubConfiguration(**incoming)
     db.add(new_config)
     db.commit()
     db.refresh(new_config)
-    
     return new_config
 
 

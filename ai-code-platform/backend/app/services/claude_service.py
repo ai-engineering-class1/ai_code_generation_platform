@@ -10,6 +10,70 @@ from app.core.config import settings
 class ClaudeService:
     def __init__(self):
         self.client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+
+    def _should_include_wp_auto_pages(self, task_title: str, task_description: str) -> bool:
+        """
+        Heuristic: include WordPress auto-pages.json requirement when task is about creating a webpage/page
+        in a WordPress context.
+        """
+        text = f"{task_title}\n{task_description}".lower()
+        wp_signals = [
+            "wordpress",
+            "wp ",
+            "wp-",
+            "wp-content",
+            "gutenberg",
+            "theme",
+            "wp plugin",
+        ]
+        page_signals = [
+            "webpage",
+            "web page",
+            "landing page",
+            "new page",
+            "create page",
+            "page template",
+        ]
+        return any(s in text for s in wp_signals) and any(s in text for s in page_signals)
+
+    def _wp_auto_pages_requirement_block(self) -> str:
+        # Keep this block copy/pasteable and very explicit so it makes it into the spec.
+        return r"""
+### WordPress auto-synced pages (required)
+
+If this task creates or modifies a WordPress webpage/page (especially inside a theme), the implementation **MUST** create or append:
+
+- `wp-content/themes/<THEME_NAME>/auto-pages.json`
+
+Rules:
+- If the file already exists, **add one example page entry only** (do not add multiple).
+- Ensure the plugin can discover the page by keeping `auto_detect` enabled and including the paths below.
+
+Use this minimal structure:
+
+```json
+{
+  "version": 1,
+  "resync": true,
+  "resync_interval": 60,
+  "auto_detect": true,
+  "auto_detect_paths": ["pages", "generate-page"],
+  "pages": [
+    {
+      "slug": "<page-slug>",
+      "title": "<Page Title>",
+      "template": "pages/page-<page-slug>.php",
+      "menu": {
+        "section": "<menu-section>",
+        "label": "<Menu Label>",
+        "icon": "<icon-class>",
+        "order": 10
+      }
+    }
+  ]
+}
+```
+"""
     
     async def generate_specification(
         self,
@@ -18,6 +82,7 @@ class ClaudeService:
         task_type: str
     ) -> str:
         """Generate technical specification using Claude"""
+        wp_block = self._wp_auto_pages_requirement_block() if self._should_include_wp_auto_pages(task_title, task_description) else ""
         prompt = f"""
 You are a senior software architect. Generate a comprehensive technical specification for the following requirement:
 
@@ -39,6 +104,8 @@ Please provide a detailed technical specification that includes:
 10. **Dependencies**: External libraries or services needed
 
 Format the specification in clear Markdown format suitable for a GitHub repository.
+
+{wp_block}
 """
         
         try:

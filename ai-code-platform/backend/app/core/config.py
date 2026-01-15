@@ -51,7 +51,8 @@ class Settings(BaseSettings):
     # Claude Web API (Remote Agent)
     CLAUDE_WEB_API_URL: str = "http://103.98.213.149:8520"
     CLAUDE_WEB_API_TOKEN: str = "sk-placeholder"
-    REMOTE_AGENT_TIMEOUT_SEC: int = 60
+    REMOTE_AGENT_TIMEOUT_SEC: int = 600
+    CODEGEN_API_URL: str = "http://103.98.213.149:8510"
     
     # Terminal
     TERMINAL_SAFE_MODE: bool = True
@@ -73,4 +74,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-
