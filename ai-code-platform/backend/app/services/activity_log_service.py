@@ -205,6 +205,21 @@ class ActivityLogService:
         activity.tie_back = tie_back
         activity.activity_end_at = datetime.utcnow() # Mark as completed
         
+        # Auto-complete task when the latest activity completes.
+        # This is best-effort and does not prevent later manual status changes.
+        try:
+            if new_status == ActivityStatus.COMPLETED.value:
+                latest_activity = db.query(TaskWorkflowHistory).filter(
+                    TaskWorkflowHistory.task_id == activity.task_id
+                ).order_by(desc(TaskWorkflowHistory.activity_start_at)).first()
+
+                if latest_activity and latest_activity.id == activity.id:
+                    task = db.query(Task).filter(Task.id == activity.task_id).with_for_update().first()
+                    if task and task.status not in [TaskStatus.CANCELLED.value, TaskStatus.FAILED.value]:
+                        task.status = TaskStatus.COMPLETED.value
+        except Exception as e:
+            print(f"Warning: could not auto-complete task for activity {activity_id}: {e}")
+
         db.commit()
         db.refresh(activity)
         return activity
