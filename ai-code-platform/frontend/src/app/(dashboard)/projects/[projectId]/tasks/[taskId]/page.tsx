@@ -299,6 +299,16 @@ export default function TaskDetailPage({
               <div className="grid gap-4 bg-white p-4 rounded-md border border-gray-200 shadow-sm">
                 {/* Detailed Metadata Grid */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-3 bg-gray-50 rounded text-xs border border-gray-100">
+                  <div className="md:col-span-2">
+                    <span className="text-gray-400 block mb-1">Name</span>
+                    <span className="font-medium text-gray-700">{task?.title || '—'}</span>
+                  </div>
+                  <div className="md:col-span-2">
+                    <span className="text-gray-400 block mb-1">Description</span>
+                    <span className="font-medium text-gray-700">
+                      {(task?.description || '').split('\n')[0]?.trim() || '—'}
+                    </span>
+                  </div>
                   <div>
                     <span className="text-gray-400 block mb-1">Status</span>
                     <span className="font-medium text-gray-700">{activity.status || 'N/A'}</span>
