@@ -116,6 +116,19 @@ function EditorContent() {
         // Initial set to avoid UI flicker
         setProject(defaultProject);
 
+        const findFirstSpecNode = (nodes: Specification[]): Specification | undefined => {
+            for (const node of nodes || []) {
+                if ((node.type === 'specification' || node.type === 'file') && node.content) {
+                    return node;
+                }
+                if (node.children && node.children.length > 0) {
+                    const found = findFirstSpecNode(node.children as any);
+                    if (found) return found;
+                }
+            }
+            return undefined;
+        };
+
         const fetchData = async () => {
             if (!pIdParam) { // Only proceed if projectId is explicitly in URL, otherwise it's a draft
                 // Try to load from workspace if effectiveTaskId exists for a draft project
@@ -205,6 +218,31 @@ function EditorContent() {
                             }
                         })
                         .catch(err => console.error("Failed to load task", err));
+
+                    // Load any existing OpenSpec workspace (including seeded defaults) for this task
+                    try {
+                        const initResult = await api.initFromWorkspace(pId, resolvedTaskId);
+                        if (initResult?.success && initResult?.specContent?.specTree?.length > 0) {
+                            setProject(prev => prev ? {
+                                ...prev,
+                                specTree: initResult.specContent.specTree,
+                                updatedAt: new Date().toISOString()
+                            } : undefined);
+
+                            // Auto-select first spec so editor isn't blank
+                            if (!selectedSpecId) {
+                                const first = findFirstSpecNode(initResult.specContent.specTree);
+                                if (first) {
+                                    setSelectedSpecId(first.id);
+                                    setSelectedSpec(first);
+                                    setSuggestions(first.suggestions || []);
+                                    setSpecContent(first.content || '');
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        // Ignore if no workspace found yet
+                    }
                 }
 
                 // 3. Fetch GitHub Config (Background Update)

@@ -19,9 +19,48 @@ from app.schemas.task import (
 from app.services.claude_service import ClaudeService
 from app.services.activity_log_service import ActivityLogService
 from app.services.notification_service import notify_task_assigned
+from app.services.openspec_service import OpenSpecService
 from app.models.task import TaskStatus, ActivityStatus, transition
+from pathlib import Path
 
 router = APIRouter()
+
+openspec_service = OpenSpecService(settings.WORKSPACE_ROOT)
+
+
+def seed_default_openspec_for_task(project: Project, task: Task) -> None:
+    """
+    Seed a minimal OpenSpec markdown file for a task so the OpenSpec editor isn't empty.
+    Idempotent: if any .md already exists under openspec/changes for this task workspace, do nothing.
+    """
+    try:
+        changes_dir = openspec_service.get_openspec_changes_dir(task.id, use_system_temp=False)
+        # If anything already exists, don't overwrite.
+        if any(changes_dir.rglob("*.md")):
+            return
+
+        rel_path = "openspec/changes/seed/task.md"
+        content_lines = [
+            f"# {task.title}".strip(),
+            "",
+            (task.description or "").strip(),
+        ]
+
+        # Optional context (kept short). This helps the agent/spec without requiring extra user work.
+        if getattr(project, "name", None) or getattr(project, "description", None):
+            content_lines += [
+                "",
+                "## Project Context",
+                f"- Project: {project.name}",
+            ]
+            if project.description:
+                content_lines.append(f"- Description: {project.description}")
+
+        content = "\n".join(content_lines).strip() + "\n"
+        openspec_service.write_spec_file(task.id, rel_path, content, use_system_temp=False)
+    except Exception as e:
+        # Never fail task creation due to seeding issues
+        print(f"Warning: failed to seed default OpenSpec for task {getattr(task, 'id', None)}: {e}")
 
 
 @router.get("/{project_id}/tasks", response_model=List[TaskResponse])
@@ -116,6 +155,9 @@ async def create_task(
             except Exception as e:
                 # Log error but don't fail task creation
                 print(f"Error sending assignment notification: {e}")
+
+    # Seed a default OpenSpec file so OpenSpec editor isn't empty for newly created tasks
+    seed_default_openspec_for_task(project, new_task)
     
     return new_task
 

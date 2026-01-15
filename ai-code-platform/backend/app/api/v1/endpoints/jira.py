@@ -8,11 +8,41 @@ from app.models.task import Task, TaskStatus, TaskStage
 from app.models.integration import JiraConfiguration
 from app.schemas.integration import JiraConfigCreate, JiraConfigUpdate, JiraConfigResponse
 from app.services.jira_service import JiraService
+from app.services.openspec_service import OpenSpecService
+from app.core.config import settings
 from datetime import datetime
 import hmac
 import hashlib
 
 router = APIRouter()
+
+openspec_service = OpenSpecService(settings.WORKSPACE_ROOT)
+
+
+def seed_default_openspec_for_task(project: Project, task: Task) -> None:
+    """Seed a minimal OpenSpec markdown file for a task (idempotent)."""
+    try:
+        changes_dir = openspec_service.get_openspec_changes_dir(task.id, use_system_temp=False)
+        if any(changes_dir.rglob("*.md")):
+            return
+        rel_path = "openspec/changes/seed/task.md"
+        content_lines = [
+            f"# {task.title}".strip(),
+            "",
+            (task.description or "").strip(),
+        ]
+        if getattr(project, "name", None) or getattr(project, "description", None):
+            content_lines += [
+                "",
+                "## Project Context",
+                f"- Project: {project.name}",
+            ]
+            if project.description:
+                content_lines.append(f"- Description: {project.description}")
+        content = "\n".join(content_lines).strip() + "\n"
+        openspec_service.write_spec_file(task.id, rel_path, content, use_system_temp=False)
+    except Exception as e:
+        print(f"Warning: failed to seed default OpenSpec for task {getattr(task, 'id', None)}: {e}")
 
 
 @router.post("/config", response_model=JiraConfigResponse, status_code=status.HTTP_201_CREATED)
@@ -293,6 +323,14 @@ async def handle_issue_created(payload: dict, db: Session):
     db.add(new_task)
     db.commit()
     db.refresh(new_task)
+
+    # Seed OpenSpec for this newly created task
+    try:
+        project = db.query(Project).filter(Project.id == new_task.project_id).first()
+        if project:
+            seed_default_openspec_for_task(project, new_task)
+    except Exception as e:
+        print(f"Warning: could not seed OpenSpec for Jira-created task {new_task.id}: {e}")
     
     print(f"✅ Successfully created task for Jira issue {issue_key}")
     print(f"   - Task ID: {new_task.id}")
