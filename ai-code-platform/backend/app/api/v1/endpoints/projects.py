@@ -29,6 +29,18 @@ async def create_project(
     current_user: User = Depends(get_current_active_user)
 ):
     """Create a new project"""
+    # Default Organization Logic
+    if not project_data.organization_id:
+        # Try to find the user's primary organization from assignments
+        from app.models.organization import UserRoleAssignment
+        assignment = db.query(UserRoleAssignment).filter(
+            UserRoleAssignment.user_id == current_user.id,
+            UserRoleAssignment.scope_org_id.isnot(None)
+        ).first()
+        
+        if assignment:
+            project_data.organization_id = assignment.scope_org_id
+            
     new_project = Project(
         **project_data.dict(),
         owner_id=current_user.id
@@ -55,6 +67,21 @@ async def get_project(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Project not found"
         )
+
+    # RBAC Scope Check
+    if project.organization_id:
+        from app.services.rbac_service import RBACService
+        # Check if user has 'proj:view' permission in the project's organization
+        if not RBACService.check_permission(db, current_user.id, "proj:view", scope_org_id=project.organization_id):
+            # Also allow if user is owner? 
+            # Design says: "Default to owner's organization". 
+            # If user is owner, they usually have permission in that org.
+            # But what if they are removed from org? 
+            # Let's enforce strictly: Organization controls access.
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail="You do not have access to this project's organization."
+            )
     
     return project
 

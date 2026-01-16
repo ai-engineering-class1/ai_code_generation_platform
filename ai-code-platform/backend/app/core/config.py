@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    RBAC_CACHE_TTL_SECONDS: int = 600 # 10 minutes default configurable TTL
     
     # Jira
     JIRA_API_URL: str = ""

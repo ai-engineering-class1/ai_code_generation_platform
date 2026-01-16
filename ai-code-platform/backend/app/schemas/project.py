@@ -8,6 +8,7 @@ class ProjectBase(BaseModel):
     description: Optional[str] = None
     jira_project_key: Optional[str] = None
     github_repo_url: Optional[str] = None
+    organization_id: Optional[str] = None # Optional for creation (defaults to user's org)
 
 
 class ProjectCreate(ProjectBase):

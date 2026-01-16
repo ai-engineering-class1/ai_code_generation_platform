@@ -26,8 +26,12 @@ class Project(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
+    # Unified RBAC Scope
+    organization_id = Column(String, ForeignKey("organizations.id"), nullable=True) # Nullable for migration, but logic should enforce it.
+    
     # Relationships
     owner = relationship("User", back_populates="owned_projects", foreign_keys=[owner_id])
+    organization = relationship("Organization", backref="projects")
     tasks = relationship("Task", back_populates="project", cascade="all, delete-orphan")
     notifications = relationship("Notification", back_populates="project")
 

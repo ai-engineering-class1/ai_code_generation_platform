@@ -10,6 +10,56 @@ def update_schema():
     print("Updating database schema...")
     
     with engine.connect() as conn:
+        # Check if is_robot column exists in users
+        try:
+            result = conn.execute(text("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name='users' AND column_name='is_robot'
+            """))
+            if result.fetchone() is None:
+                print("Adding is_robot column to users table...")
+                conn.execute(text("""
+                    ALTER TABLE users 
+                    ADD COLUMN is_robot BOOLEAN NOT NULL DEFAULT FALSE
+                """))
+                conn.commit()
+                print("✓ is_robot column added")
+            else:
+                print("✓ is_robot column already exists")
+        except Exception as e:
+            print(f"Error checking/adding is_robot: {e}")
+
+        except Exception as e:
+            print(f"Error checking/adding is_robot: {e}")
+
+        # Check if organization_id column exists in projects
+        try:
+            result = conn.execute(text("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name='projects' AND column_name='organization_id'
+            """))
+            if result.fetchone() is None:
+                print("Adding organization_id column to projects table...")
+                conn.execute(text("""
+                    ALTER TABLE projects 
+                    ADD COLUMN organization_id VARCHAR
+                """))
+                # Add Foreign Key Constraint
+                conn.execute(text("""
+                     ALTER TABLE projects
+                     ADD CONSTRAINT fk_projects_organization
+                     FOREIGN KEY (organization_id) 
+                     REFERENCES organizations(id)
+                """))
+                conn.commit()
+                print("✓ organization_id column added")
+            else:
+                print("✓ organization_id column already exists")
+        except Exception as e:
+            print(f"Error checking/adding organization_id: {e}")
+
         # Check if jira_email column exists in jira_configurations
         try:
             result = conn.execute(text("""
@@ -228,6 +278,154 @@ def update_schema():
         except Exception as e:
             # It might fail if default didn't exist, which is fine
             print(f"Note: Could not drop default (might not exist): {e}")
+
+        # --- RBAC & Organization Migration ---
+        try:
+            print("\nUpdating RBAC & Organization Schema...")
+            # Import new models to ensure they are registered with Base.metadata
+            from app.models import rbac, organization, subscription
+            
+            # Create new tables if they don't exist
+            Base.metadata.create_all(bind=engine)
+            print("✓ New tables (permissions, roles, organizations, etc.) ensured")
+            
+
+            # Seed Initial Roles & Permissions
+            print("Seeding standard roles (Manager, Developer, QA_Tester, Author)...")
+            # CLEANUP FIRST (As requested: clean table and add fresh)
+            # We need to clean role_permissions first due to FK
+            conn.execute(text("DELETE FROM role_permissions"))
+            conn.execute(text("DELETE FROM permissions"))
+            # We also clean roles to ensure fresh IDs/descriptions, 
+            # carefully avoiding breaking user_role_assignments if any users exist (unlikely yet).
+            # But let's only delete system roles.
+            conn.execute(text("DELETE FROM roles WHERE name IN ('Manager', 'Developer', 'QA_Tester', 'Author', 'System Admin')"))
+
+            import uuid
+            
+            # Helper to create/get role
+            # We do this with raw SQL blocks for migration simplicity
+            
+            roles_data = {
+                "Manager": "Project administrator and team lead",
+                "Developer": "Technical contributor implementing features",
+                "QA_Tester": "Quality assurance specialist",
+                "Author": "Content/Requirement creator",
+                "System Admin": "Full system access"
+            }
+            
+            role_ids = {}
+            for r_name, r_desc in roles_data.items():
+                # Check if exists
+                existing = conn.execute(text(f"SELECT id FROM roles WHERE name='{r_name}'")).fetchone()
+                if existing:
+                    role_ids[r_name] = existing[0]
+                else:
+                    rid = str(uuid.uuid4())
+                    is_sys = 'TRUE' if r_name == 'System Admin' else 'FALSE'
+                    conn.execute(text(f"INSERT INTO roles (id, name, description, is_system_role) VALUES ('{rid}', '{r_name}', '{r_desc}', {is_sys})"))
+                    role_ids[r_name] = rid
+            
+            # Define Permissions (Code, Name, Type)
+            # Derived from RBAC_Design.md
+            perms_data = [
+                # Project Management
+                ("proj:view", "View Project", "menu"),
+                ("proj:create", "Create Project", "button"),
+                ("proj:delete", "Delete Project", "button"),
+                ("proj:settings", "Update Settings", "menu"),
+                ("proj:members", "Manage Members", "menu"),
+                
+                # Task Management
+                ("task:create", "Create Task", "button"),
+                ("task:edit", "Edit Task Details", "button"),
+                ("task:delete", "Delete Task", "button"),
+                ("task:assign", "Assign Task", "button"),
+                
+                # Spec
+                ("spec:edit", "Edit Specification", "button"),
+                ("spec:approve", "Approve Specification", "button"),
+                
+                # Execution
+                ("exec:codegen", "Trigger Code Gen", "button"),
+                ("exec:terminal", "Open Terminal", "menu"),
+                ("exec:source", "View Source Code", "menu"),
+                
+                # Workflow
+                ("wf:progress", "Mark In Progress", "button"),
+                ("wf:qa", "Mark Ready for QA", "button"),
+                ("wf:complete", "Mark Completed", "button"),
+                ("wf:fail", "Mark Failed", "button"),
+
+                # System
+                ("sys:admin", "System Administration", "menu")
+            ]
+            
+            perm_ids = {}
+            # Import Permission model for ORM usage
+            from app.models.rbac import Permission, PermissionType
+            
+            for p_code, p_name, p_type in perms_data:
+                existing = conn.execute(text("SELECT id FROM permissions WHERE code=:code"), {"code": p_code}).fetchone()
+                if existing:
+                    perm_ids[p_code] = existing[0]
+                else:
+                    pid = str(uuid.uuid4())
+                    # Use ORM to properly handle Enum type
+                    perm = Permission(
+                        id=pid,
+                        code=p_code,
+                        name=p_name,
+                        type=PermissionType(p_type)  # Convert string to Enum
+                    )
+                    # Get session from connection
+                    from sqlalchemy.orm import Session
+                    session = Session(bind=conn)
+                    session.add(perm)
+                    session.flush()  # Flush to DB but don't commit yet
+                    perm_ids[p_code] = pid
+
+            # Matrix Assignments (Role -> [Permissions])
+            # Manager: Everything except QA pass/fail specific flows? 
+            # Based on matrix:
+            matrix = {
+                "Manager": ["proj:view", "proj:create", "proj:delete", "proj:settings", "proj:members", 
+                            "task:create", "task:edit", "task:delete", "task:assign",
+                            "spec:edit", "spec:approve",
+                            "exec:codegen", "exec:terminal", "exec:source",
+                            "wf:progress", "wf:qa", "wf:complete", "wf:fail"],
+                            
+                "Developer": ["proj:view", "task:create", "task:edit", "task:assign",
+                              "spec:edit",
+                              "exec:codegen", "exec:terminal", "exec:source",
+                              "wf:progress", "wf:qa", "wf:fail"],
+                              
+                "QA_Tester": ["proj:view", "exec:source", "wf:complete", "wf:fail"], # Matrix says QA can View Source
+                
+                "Author": ["proj:view", "proj:create", 
+                           "task:create", "task:edit", "task:delete", "task:assign",
+                           "spec:edit", "spec:approve", "exec:source"],
+                
+                "System Admin": [p[0] for p in perms_data] # All permissions
+            }
+            
+            for r_name, p_codes in matrix.items():
+                rid = role_ids[r_name]
+                for p_code in p_codes:
+                    if p_code in perm_ids:
+                        pid = perm_ids[p_code]
+                        # Check link
+                        link = conn.execute(text(f"SELECT role_id FROM role_permissions WHERE role_id='{rid}' AND permission_id='{pid}'")).fetchone()
+                        if not link:
+                            conn.execute(text(f"INSERT INTO role_permissions (role_id, permission_id) VALUES ('{rid}', '{pid}')"))
+
+            conn.commit()
+            print("✓ Extended RBAC roles and matrix seeded")
+                
+        except Exception as e:
+            print(f"Error updating RBAC schema: {e}")
+            import traceback
+            traceback.print_exc()
 
 if __name__ == "__main__":
     update_schema()
