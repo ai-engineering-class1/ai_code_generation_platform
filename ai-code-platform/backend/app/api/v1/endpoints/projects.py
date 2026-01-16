@@ -67,6 +67,21 @@ async def get_project(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Project not found"
         )
+
+    # RBAC Scope Check
+    if project.organization_id:
+        from app.services.rbac_service import RBACService
+        # Check if user has 'proj:view' permission in the project's organization
+        if not RBACService.check_permission(db, current_user.id, "proj:view", scope_org_id=project.organization_id):
+            # Also allow if user is owner? 
+            # Design says: "Default to owner's organization". 
+            # If user is owner, they usually have permission in that org.
+            # But what if they are removed from org? 
+            # Let's enforce strictly: Organization controls access.
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail="You do not have access to this project's organization."
+            )
     
     return project
 
