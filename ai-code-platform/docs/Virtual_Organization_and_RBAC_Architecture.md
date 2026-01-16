@@ -167,6 +167,17 @@ To mitigate the cost of recursive queries and multiple table joins, we will impl
 *   **Pros**: Unified permission logic. "System Admin" is just a role. Scalable. High performance with Redis.
 *   **Cons**: Requires migration of existing user roles. Caching adds slight application layer complexity.
 
+### 5.1 Project Visibility & Defaulting Logic
+The system enforces a secure-by-default visibility model based on Organization Scopes.
+
+**Workflow:**
+1.  **Creation**: A User creates a Project.
+2.  **Default Scope**: If no specific Organization is selected, the system defaults the Project's scope (`organization_id`) to the User's primary Organization (e.g., "Engineering").
+3.  **Visibility Rules**:
+    *   **Team Members**: Colleagues in the same Organization (assignments with `scope_org_id = Engineering`) inherit access.
+    *   **External Users**: Users in other Organizations (e.g., "Marketing") are denied access unless explicitly added.
+4.  **UI Implementation (Pending)**: The Frontend "Create Project" form must include an Organization Dropdown (populated with the user's memberships) to allow selecting a different scope (e.g., "Company Wide" or "Special Task Force"). Currently, this defaults to the primary org automatically.
+
 ## 6. Access Control Logic (API Implementation)
 We replace decorators with a standardized **FastAPI Dependency** that leverages the cached RBAC check.
 

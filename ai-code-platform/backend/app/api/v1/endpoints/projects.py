@@ -29,6 +29,18 @@ async def create_project(
     current_user: User = Depends(get_current_active_user)
 ):
     """Create a new project"""
+    # Default Organization Logic
+    if not project_data.organization_id:
+        # Try to find the user's primary organization from assignments
+        from app.models.organization import UserRoleAssignment
+        assignment = db.query(UserRoleAssignment).filter(
+            UserRoleAssignment.user_id == current_user.id,
+            UserRoleAssignment.scope_org_id.isnot(None)
+        ).first()
+        
+        if assignment:
+            project_data.organization_id = assignment.scope_org_id
+            
     new_project = Project(
         **project_data.dict(),
         owner_id=current_user.id

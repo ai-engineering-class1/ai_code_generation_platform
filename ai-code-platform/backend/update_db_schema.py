@@ -30,6 +30,36 @@ def update_schema():
         except Exception as e:
             print(f"Error checking/adding is_robot: {e}")
 
+        except Exception as e:
+            print(f"Error checking/adding is_robot: {e}")
+
+        # Check if organization_id column exists in projects
+        try:
+            result = conn.execute(text("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name='projects' AND column_name='organization_id'
+            """))
+            if result.fetchone() is None:
+                print("Adding organization_id column to projects table...")
+                conn.execute(text("""
+                    ALTER TABLE projects 
+                    ADD COLUMN organization_id VARCHAR
+                """))
+                # Add Foreign Key Constraint
+                conn.execute(text("""
+                     ALTER TABLE projects
+                     ADD CONSTRAINT fk_projects_organization
+                     FOREIGN KEY (organization_id) 
+                     REFERENCES organizations(id)
+                """))
+                conn.commit()
+                print("✓ organization_id column added")
+            else:
+                print("✓ organization_id column already exists")
+        except Exception as e:
+            print(f"Error checking/adding organization_id: {e}")
+
         # Check if jira_email column exists in jira_configurations
         try:
             result = conn.execute(text("""
