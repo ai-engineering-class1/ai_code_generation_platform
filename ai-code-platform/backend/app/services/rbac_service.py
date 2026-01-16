@@ -52,10 +52,47 @@ class RBACService:
         return permissions
 
     @staticmethod
+    def get_org_ancestors(db: Session, org_id: str) -> List[str]:
+        """
+        Get all ancestor organization IDs for a given organization.
+        Returns [org_id, parent_id, grandparent_id, ...] up to root.
+        Example: get_org_ancestors("Dept B") -> ["Dept B", "Company A"]
+        """
+        from sqlalchemy import text
+        
+        # PostgreSQL recursive CTE to get all ancestors
+        query = text("""
+            WITH RECURSIVE org_tree AS (
+                -- Base case: start with the given org
+                SELECT id, parent_id, 0 as level
+                FROM organizations
+                WHERE id = :org_id
+                
+                UNION ALL
+                
+                -- Recursive case: get parent
+                SELECT o.id, o.parent_id, ot.level + 1
+                FROM organizations o
+                INNER JOIN org_tree ot ON o.id = ot.parent_id
+            )
+            SELECT id FROM org_tree ORDER BY level
+        """)
+        
+        result = db.execute(query, {"org_id": org_id})
+        return [row[0] for row in result]
+
+    @staticmethod
     def check_permission(db: Session, user_id: str, permission_code: str, scope_org_id: Optional[str] = None) -> bool:
         """
         Check if user has a permission.
         Uses Redis Caching (2-Layer).
+        Implements bottom-up inheritance: users in child orgs can access parent org resources.
+        
+        Example:
+        - Alice (assigned to Dept B) accessing Project1 (Company A):
+          - Get ancestors of Alice's org (Dept B) = ["Dept B", "Company A"]
+          - Project1 is in "Company A"
+          - "Company A" is in Alice's ancestors -> ALLOW
         """
         key = RBACService.get_cache_key(user_id)
         
@@ -78,9 +115,19 @@ class RBACService:
                 if perm["scope_org_id"] is None:
                     return True
                 
-                # B. Scoped Permission -> Must match exact org (or ancestor - pending ancestor logic)
+                # B. Direct Scope Match
+                # User assigned to "Dept B" accessing "Dept B" project
                 if scope_org_id and perm["scope_org_id"] == scope_org_id:
                     return True
+                
+                # C. Ancestor Match (Bottom-Up Inheritance)
+                # User assigned to "Dept B" accessing "Company A" project
+                # Get ancestors of user's assigned org
+                if perm["scope_org_id"]:
+                    user_org_ancestors = RBACService.get_org_ancestors(db, perm["scope_org_id"])
+                    # Check if the project's org is in the user's ancestor chain
+                    if scope_org_id in user_org_ancestors:
+                        return True
                     
         return False
 

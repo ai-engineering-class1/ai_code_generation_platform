@@ -176,7 +176,12 @@ The system enforces a secure-by-default visibility model based on Organization S
 3.  **Visibility Rules**:
     *   **Team Members**: Colleagues in the same Organization (assignments with `scope_org_id = Engineering`) inherit access.
     *   **External Users**: Users in other Organizations (e.g., "Marketing") are denied access unless explicitly added.
-4.  **UI Implementation (Pending)**: The Frontend "Create Project" form must include an Organization Dropdown (populated with the user's memberships) to allow selecting a different scope (e.g., "Company Wide" or "Special Task Force"). Currently, this defaults to the primary org automatically.
+5.  **Cross-Team Collaboration**: To grant access to users from multiple departments:
+    *   Create a new Organization node (e.g., `org_project123`, type: `GROUP`)
+    *   Assign all required users to this Organization via `UserRoleAssignment`
+    *   Set the Project's `organization_id` to this new Organization
+    *   Example: Users A, B (from DeptA) and C (from DeptB) can collaborate on Project123 by all being assigned to `org_project123`
+6.  **UI Implementation (Pending)**: The Frontend "Create Project" form must include an Organization Dropdown (populated with the user's memberships) to allow selecting a different scope (e.g., "Company Wide" or "Special Task Force"). Currently, this defaults to the primary org automatically.
 
 ## 6. Access Control Logic (API Implementation)
 We replace decorators with a standardized **FastAPI Dependency** that leverages the cached RBAC check.
