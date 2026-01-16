@@ -23,6 +23,7 @@ class User(Base):
     avatar_url = Column(String, nullable=True)
     bio = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
+    is_robot = Column(Boolean, default=False) # Agent vs Human
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
@@ -30,4 +31,7 @@ class User(Base):
     owned_projects = relationship("Project", back_populates="owner", foreign_keys="Project.owner_id")
     assigned_tasks = relationship("Task", back_populates="assignee", foreign_keys="Task.assignee_id")
     notifications = relationship("Notification", back_populates="user")
+    
+    # Unified RBAC (replaces 'role' column)
+    role_assignments = relationship("UserRoleAssignment", back_populates="user")
 
