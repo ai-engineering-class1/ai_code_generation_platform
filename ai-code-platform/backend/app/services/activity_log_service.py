@@ -203,22 +203,56 @@ class ActivityLogService:
         activity.status = new_status
              
         activity.tie_back = tie_back
-        activity.activity_end_at = datetime.utcnow() # Mark as completed
+        activity_end_time = datetime.utcnow()
+        activity.activity_end_at = activity_end_time # Mark as completed
+        print(f"📝 Ending activity {activity_id} (type: {activity.activity_type}, task_id: {activity.task_id}) at {activity_end_time.isoformat()}")
         
-        # Auto-complete task when the latest activity completes.
-        # This is best-effort and does not prevent later manual status changes.
-        try:
-            if new_status == ActivityStatus.COMPLETED.value:
-                latest_activity = db.query(TaskWorkflowHistory).filter(
-                    TaskWorkflowHistory.task_id == activity.task_id
-                ).order_by(desc(TaskWorkflowHistory.activity_start_at)).first()
-
-                if latest_activity and latest_activity.id == activity.id:
-                    task = db.query(Task).filter(Task.id == activity.task_id).with_for_update().first()
-                    if task and task.status not in [TaskStatus.CANCELLED.value, TaskStatus.FAILED.value]:
-                        task.status = TaskStatus.COMPLETED.value
-        except Exception as e:
-            print(f"Warning: could not auto-complete task for activity {activity_id}: {e}")
+        # TEMP DISABLED: Auto-completion logic commented out
+        # Reason: Agent activity completion doesn't mean the task is done.
+        # After agent completes, there will be push events, PR events, and workflow activities.
+        # Users may also need to assign workflow issues to another agent.
+        # Tasks should be manually marked as completed when all work is truly finished.
+        # 
+        # TODO: Re-enable in future if needed with better conditions:
+        # - Only auto-complete when ALL activities (including workflows) are complete
+        # - Or make it optional per task/project configuration
+        # - Or trigger manually by user action
+        #
+        # # Auto-complete task when the latest activity completes.
+        # # Only auto-complete for specific activity types to prevent premature task completion
+        # # from system events (webhooks, notifications) or manual activities.
+        # # This is best-effort and does not prevent later manual status changes.
+        # try:
+        #     if new_status == ActivityStatus.COMPLETED.value:
+        #         # Only auto-complete for agent execution activities
+        #         # Activity types that should trigger auto-completion:
+        #         # - "agent_execution": When an agent completes its work
+        #         # Activity types that should NOT trigger auto-completion:
+        #         # - "webhook_event": GitHub webhook events (workflows, PRs, pushes)
+        #         # - "workflow_execution": Workflow execution events
+        #         # - "system_event": System-generated events
+        #         auto_complete_activity_types = ["agent_execution"]
+        #         
+        #         if activity.activity_type in auto_complete_activity_types:
+        #             latest_activity = db.query(TaskWorkflowHistory).filter(
+        #                 TaskWorkflowHistory.task_id == activity.task_id
+        #             ).order_by(desc(TaskWorkflowHistory.activity_start_at)).first()
+        #
+        #             if latest_activity and latest_activity.id == activity.id:
+        #                 task = db.query(Task).filter(Task.id == activity.task_id).with_for_update().first()
+        #                 if task and task.status not in [TaskStatus.CANCELLED.value, TaskStatus.FAILED.value]:
+        #                     old_status = task.status
+        #                     task.status = TaskStatus.COMPLETED.value
+        #                     completion_time = datetime.utcnow()
+        #                     print(f"✅ Auto-completed task {activity.task_id} (status: {old_status} -> COMPLETED) after {activity.activity_type} activity {activity_id} completed at {completion_time.isoformat()}")
+        #                 else:
+        #                     print(f"⚠️ Skipped auto-completion for task {activity.task_id}: task status is {task.status if task else 'None'}")
+        #             else:
+        #                 print(f"⚠️ Skipped auto-completion for task {activity.task_id}: activity {activity_id} is not the latest activity")
+        #         else:
+        #             print(f"ℹ️ Activity {activity_id} (type: {activity.activity_type}) completed but will NOT auto-complete task {activity.task_id} (only 'agent_execution' activities trigger auto-completion)")
+        # except Exception as e:
+        #     print(f"Warning: could not auto-complete task for activity {activity_id}: {e}")
 
         db.commit()
         db.refresh(activity)

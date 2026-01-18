@@ -1,12 +1,51 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Bell, Check, CheckCheck } from 'lucide-react'
+import { Bell, Check, CheckCheck,Clock,X } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import apiClient from '@/lib/api'
 import { Notification } from '@/types'
 
+// Format notification time as relative time (e.g., "2 minutes ago") or absolute time
+const formatNotificationTime = (createdAt: string): string => {
+  if (!createdAt) {
+    return 'Unknown time'
+  }
+  
+  const now = new Date()
+  const created = new Date(createdAt)
+  
+  // Check if date is valid
+  if (isNaN(created.getTime())) {
+    return 'Invalid date'
+  }
+  
+  const diffInSeconds = Math.floor((now.getTime() - created.getTime()) / 1000)
+
+  if (diffInSeconds < 60) {
+    return 'Just now'
+  } else if (diffInSeconds < 3600) {
+    const minutes = Math.floor(diffInSeconds / 60)
+    return `${minutes} minute${minutes > 1 ? 's' : ''} ago`
+  } else if (diffInSeconds < 86400) {
+    const hours = Math.floor(diffInSeconds / 3600)
+    return `${hours} hour${hours > 1 ? 's' : ''} ago`
+  } else if (diffInSeconds < 604800) {
+    const days = Math.floor(diffInSeconds / 86400)
+    return `${days} day${days > 1 ? 's' : ''} ago`
+  } else {
+    // For older notifications, show date and time
+    return created.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: created.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    })
+  }
+}
 const fetchNotifications = async (unreadOnly: boolean = false): Promise<Notification[]> => {
   const response = await apiClient.get(`/notifications?unread_only=${unreadOnly}&limit=20`)
   return response.data
@@ -35,7 +74,7 @@ export default function NotificationBell() {
   const { data: unreadCount = 0 } = useQuery<number>({
     queryKey: ['notifications', 'unread-count'],
     queryFn: fetchUnreadCount,
-    refetchInterval: 10000, // Refresh every 10 seconds
+    refetchInterval: 30000, // Refresh every 30 seconds
   })
 
   // Fetch notifications when dropdown is open
@@ -43,7 +82,7 @@ export default function NotificationBell() {
     queryKey: ['notifications', 'list'],
     queryFn: () => fetchNotifications(false),
     enabled: open, // Only fetch when dropdown is open
-    refetchInterval: open ? 5000 : false, // Refresh every 5 seconds when open
+    refetchInterval: open ? 10000 : false, // Refresh every 10 seconds when open
   })
 
   const markReadMutation = useMutation({
@@ -194,8 +233,9 @@ export default function NotificationBell() {
                             {notification.message}
                           </p>
                         )}
-                        <p className="mt-1 text-xs text-gray-400">
-                          {new Date(notification.createdAt).toLocaleString()}
+                        <p className="mt-1 text-xs text-gray-400 flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {notification.createdAt ? formatNotificationTime(notification.createdAt) : 'Unknown time'}
                         </p>
                       </div>
                     </div>
