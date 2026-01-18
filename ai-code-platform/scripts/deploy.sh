@@ -114,15 +114,15 @@ if [ "$SKIP_BACKUP" = false ]; then
     TIMESTAMP=$(date +%Y%m%d-%H%M%S)
     BACKUP_TAG="backup-$TIMESTAMP"
     
-    # Check if latest images exist
-    if docker images -q "${BACKEND_IMAGE}:latest" > /dev/null 2>&1; then
+    # Check if latest images exist and tag them (don't fail if they don't exist)
+    if docker images -q "${BACKEND_IMAGE}:latest" > /dev/null 2>&1 && [ -n "$(docker images -q "${BACKEND_IMAGE}:latest")" ]; then
         docker tag "${BACKEND_IMAGE}:latest" "${BACKEND_IMAGE}:${BACKUP_TAG}"
         print_success "✓ Created backup: ${BACKEND_IMAGE}:${BACKUP_TAG}"
     else
         print_warning "⚠ No existing backend:latest image to backup"
     fi
     
-    if docker images -q "${FRONTEND_IMAGE}:latest" > /dev/null 2>&1; then
+    if docker images -q "${FRONTEND_IMAGE}:latest" > /dev/null 2>&1 && [ -n "$(docker images -q "${FRONTEND_IMAGE}:latest")" ]; then
         docker tag "${FRONTEND_IMAGE}:latest" "${FRONTEND_IMAGE}:${BACKUP_TAG}"
         print_success "✓ Created backup: ${FRONTEND_IMAGE}:${BACKUP_TAG}"
     else

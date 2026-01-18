@@ -81,20 +81,30 @@ if (-not $SkipBackup) {
     $backupTag = "backup-$timestamp"
     
     # Check if latest images exist
-    $backendExists = docker images -q "${BACKEND_IMAGE}:latest"
-    $frontendExists = docker images -q "${FRONTEND_IMAGE}:latest"
+    $backendExists = docker images -q "${BACKEND_IMAGE}:latest" 2>$null
+    $frontendExists = docker images -q "${FRONTEND_IMAGE}:latest" 2>$null
     
     if ($backendExists) {
-        docker tag "${BACKEND_IMAGE}:latest" "${BACKEND_IMAGE}:${backupTag}"
-        Write-Success "✓ Created backup: ${BACKEND_IMAGE}:${backupTag}"
+        docker tag "${BACKEND_IMAGE}:latest" "${BACKEND_IMAGE}:${backupTag}" 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Success "✓ Created backup: ${BACKEND_IMAGE}:${backupTag}"
+        }
+        else {
+            Write-Warning "⚠ Could not create backend backup (image may not exist)"
+        }
     }
     else {
         Write-Warning "⚠ No existing backend:latest image to backup"
     }
     
     if ($frontendExists) {
-        docker tag "${FRONTEND_IMAGE}:latest" "${FRONTEND_IMAGE}:${backupTag}"
-        Write-Success "✓ Created backup: ${FRONTEND_IMAGE}:${backupTag}"
+        docker tag "${FRONTEND_IMAGE}:latest" "${FRONTEND_IMAGE}:${backupTag}" 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Success "✓ Created backup: ${FRONTEND_IMAGE}:${backupTag}"
+        }
+        else {
+            Write-Warning "⚠ Could not create frontend backup (image may not exist)"
+        }
     }
     else {
         Write-Warning "⚠ No existing frontend:latest image to backup"
