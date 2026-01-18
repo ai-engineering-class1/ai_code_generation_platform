@@ -1,0 +1,59 @@
+# Production docker-compose.yml Example
+# This version uses pre-built images instead of building from source
+# Use this for production deployments with version control
+
+services:
+  backend:
+    # Use pre-built image with version tag instead of building
+    image: lee-ai-code-platform-backend:${VERSION:-latest}
+    # build: ./backend  # Commented out for production
+    container_name: Lee-ai-code-platform-backend
+    restart: unless-stopped
+    ports:
+      - "4531:8000"
+    networks:
+      - Lee-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file:
+      - ./backend/.env
+    environment:
+      # Connect to the external redis on the host machine
+      - REDIS_HOST=host.docker.internal
+      - REDIS_PORT=4502
+      # Ensure CORS allows our new frontend port
+      - CORS_ORIGINS=["http://localhost:4530","http://127.0.0.1:4530","http://localhost:3012","http://103.98.213.149:4530","https://aicodegen.easiiodev.ai"]
+      # Claude CLI Configuration
+      - CLAUDE_EXECUTABLE_PATH=claude
+      - ANTHROPIC_BASE_URL=https://open.bigmodel.cn/api/anthropic
+      - API_TIMEOUT_MS=600000
+      - WORKSPACE_ROOT=/safe_workspace
+    volumes:
+      - ./backend:/app # Optional: for hot reloading/config access
+      - /tmp/safe_workspace:/safe_workspace # Bind mount host /tmp/safe_workspace to container /safe_workspace
+
+  frontend:
+    # Use pre-built image with version tag instead of building
+    image: lee-ai-code-platform-frontend:${VERSION:-latest}
+    # build:
+    #   context: ./frontend
+    #   args:
+    #     # Build-time variable for Next.js to bake in the backend URL
+    #     NEXT_PUBLIC_API_URL: https://aicodegen.easiiodev.ai
+    container_name: Lee-ai-code-platform-frontend
+    restart: unless-stopped
+    ports:
+      - "4530:3012"
+    networks:
+      - Lee-network
+    environment:
+      # Runtime override: Set to empty string to force relative paths (browser -> nginx -> backend)
+      # This fixes Mixed Content issues.
+      - NEXT_PUBLIC_API_URL=
+    depends_on:
+      - backend
+
+networks:
+  Lee-network:
+    name: Lee-network
+    external: true
