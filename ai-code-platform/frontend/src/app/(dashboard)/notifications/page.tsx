@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, CheckCheck, Check, Bell } from 'lucide-react'
+import { ArrowLeft, CheckCheck, Check, Bell,Clock } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import apiClient from '@/lib/api'
 import { Notification } from '@/types'
@@ -28,6 +28,35 @@ const markAllAsRead = async (notificationIds: string[]): Promise<void> => {
   await apiClient.put('/notifications/mark-read', { notification_ids: notificationIds })
 }
 
+// Format notification time as relative time (e.g., "2 minutes ago") or absolute time
+const formatNotificationTime = (createdAt: string): string => {
+  const now = new Date()
+  const created = new Date(createdAt)
+  const diffInSeconds = Math.floor((now.getTime() - created.getTime()) / 1000)
+
+  if (diffInSeconds < 60) {
+    return 'Just now'
+  } else if (diffInSeconds < 3600) {
+    const minutes = Math.floor(diffInSeconds / 60)
+    return `${minutes} minute${minutes > 1 ? 's' : ''} ago`
+  } else if (diffInSeconds < 86400) {
+    const hours = Math.floor(diffInSeconds / 3600)
+    return `${hours} hour${hours > 1 ? 's' : ''} ago`
+  } else if (diffInSeconds < 604800) {
+    const days = Math.floor(diffInSeconds / 86400)
+    return `${days} day${days > 1 ? 's' : ''} ago`
+  } else {
+    // For older notifications, show date and time
+    return created.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: created.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    })
+  }
+}
 export default function NotificationsPage() {
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -45,14 +74,14 @@ export default function NotificationsPage() {
   const { data: notifications = [], isLoading, refetch } = useQuery<Notification[]>({
     queryKey: ['notifications', 'all', filter],
     queryFn: () => fetchNotifications(0, 100),
-    refetchInterval: 10000, // Refresh every 10 seconds
+    refetchInterval: 30000, // Refresh every 30 seconds
   })
 
   // Fetch unread count
   const { data: unreadCount = 0 } = useQuery<number>({
     queryKey: ['notifications', 'unread-count'],
     queryFn: fetchUnreadCount,
-    refetchInterval: 10000,
+    refetchInterval: 30000,
   })
 
   const markReadMutation = useMutation({
@@ -234,9 +263,10 @@ export default function NotificationsPage() {
                             {notification.message}
                           </p>
                         )}
-                        <div className="mt-2 flex items-center space-x-4 text-xs text-gray-400">
-                          <span>
-                            {new Date(notification.createdAt).toLocaleString()}
+                        <div className="mt-2 flex items-center space-x-4 text-xs text-gray-500">
+                          <span className="flex items-center space-x-1 font-medium">
+                            <Clock className="h-3 w-3" />
+                            <span>{formatNotificationTime(notification.createdAt)}</span>
                           </span>
                           {notification.read && (
                             <span className="flex items-center space-x-1">

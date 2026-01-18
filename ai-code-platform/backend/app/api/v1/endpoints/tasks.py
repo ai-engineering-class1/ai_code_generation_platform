@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query,Body
 from sqlalchemy.orm import Session, joinedload
 from typing import List
+from pydantic import BaseModel
 from urllib.parse import urlparse
 import httpx
 import logging
@@ -24,6 +25,9 @@ from app.models.task import TaskStatus, ActivityStatus, transition
 from pathlib import Path
 
 router = APIRouter()
+class AssignAgentCIRequest(BaseModel):
+    prompts: str
+    repo_url: str
 
 openspec_service = OpenSpecService(settings.WORKSPACE_ROOT)
 
@@ -264,7 +268,7 @@ async def get_task_activities(
             detail="Task not found"
         )
     
-    from app.models.notification import TaskWorkflowHistory
+    from app.models.task import TaskWorkflowHistory
     
     # Fetch workflow history ordered by created_at DESC (newest first)
     try:
@@ -275,6 +279,8 @@ async def get_task_activities(
         return activities
     except Exception as e:
         print(f"Error fetching activities: {e}")
+        import traceback
+        traceback.print_exc()
         # Return empty list if query fails
         return []
 
@@ -389,7 +395,7 @@ async def delete_task(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Delete a task"""
+    """Delete a task and all related records"""
     # Verify project ownership
     project = db.query(Project).filter(
         Project.id == project_id
@@ -412,11 +418,139 @@ async def delete_task(
             detail="Task not found"
         )
     
-    db.delete(task)
-    db.commit()
+    # Delete related records first to avoid foreign key constraint violations
+    from app.models.workflow import Specification, CodeGeneration
+    from app.models.task import TaskWorkflowHistory
     
-    return None
+    try:
+        # Delete workflow history
+        db.query(TaskWorkflowHistory).filter(
+            TaskWorkflowHistory.task_id == task_id
+        ).delete()
+        
+        # Delete code generations (which may have pipeline_executions)
+        code_generations = db.query(CodeGeneration).filter(
+            CodeGeneration.task_id == task_id
+        ).all()
+        for code_gen in code_generations:
+            # Delete pipeline executions first
+            from app.models.workflow import PipelineExecution
+            db.query(PipelineExecution).filter(
+                PipelineExecution.code_generation_id == code_gen.id
+            ).delete()
+            # Then delete the code generation
+            db.delete(code_gen)
+        
+        # Delete specifications
+        db.query(Specification).filter(
+            Specification.task_id == task_id
+        ).delete()
+        
+        # Finally, delete the task itself
+        db.delete(task)
+        db.commit()
+        
+        return None
+    except Exception as e:
+        db.rollback()
+        print(f"Error deleting task {task_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete task: {str(e)}"
+        )
 
+@router.post("/{project_id}/tasks/{task_id}/assign-ci")
+async def assign_to_agent_ci(
+    project_id: str,
+    task_id: str,
+    request: AssignAgentCIRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Assign task to remote Claude Web API agent with custom prompts.
+    
+    Args:
+        project_id: Project ID
+        task_id: Task ID
+        request: Request body containing prompts and repo_url
+    
+    STAR Lifecycle:
+    1. Start Activity (S, T): "Remote Agent Execution", Context = Repo URL.
+    2. Execute: Call Remote Agent API with custom prompts.
+    3. Update Activity (A): "Dispatched to Remote Agent (ID: ...)"
+    """
+    try:
+        prompts = request.prompts
+        repo_url = request.repo_url
+
+        # 1. Validate Project
+        project = db.query(Project).filter(
+            Project.id == project_id,
+            Project.owner_id == current_user.id
+        ).first()
+
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        # Clean repo_url (remove .git suffix if present)
+        clean_repo_url = repo_url
+        if clean_repo_url and clean_repo_url.endswith(".git"):
+            clean_repo_url = clean_repo_url[:-4]
+
+        if not clean_repo_url:
+            raise HTTPException(status_code=400, detail="Repository URL is required.")
+
+        # 2. Init Service
+        activity_service = ActivityLogService()
+        claude_service = ClaudeService()
+
+        # 3. STAR: Start Activity (Situation, Task)
+        activity = activity_service.start_activity(
+            db=db,
+            task_id=task_id,
+            title="Remote Agent Execution (CI)",
+            operator_id="agent-claude-remote",
+            activity_type="agent_execution",
+            situation=f"User initiated remote agent task for repository {clean_repo_url} with custom prompts.",
+            task_role="Implement requested feature and generate code (Remote Agent) with custom instructions."
+        )
+
+        # 4. Execute Remote Call with custom prompts
+        try:
+            result = await claude_service.assign_to_agent_ci(repo_url=clean_repo_url, prompts=prompts)
+            remote_task_id = result.get("taskId")
+
+            # 5. STAR: Update Activity (Action) with success
+            activity = activity_service.update_activity(
+                db=db,
+                activity_id=activity.id,
+                action=f"Successfully dispatched task to remote agent.\nRemote Task ID: {remote_task_id}.\nPrompt: {prompts[:200]}{'...' if len(prompts) > 200 else ''}\nWaiting for results via polling...",
+                metadata={"remote_task_id": remote_task_id, "remote_status": "dispatched", "custom_prompts": prompts}
+            )
+
+            # Return activity so frontend can start polling 'remote_task_id'
+            return activity
+
+        except Exception as e:
+            # Handle Dispatch Failure
+            activity_service.end_activity(
+                db=db,
+                activity_id=activity.id,
+                result=f"Failed to dispatch to remote agent. Error: {str(e)}",
+                status="failed"
+            )
+            raise HTTPException(status_code=500, detail=str(e))
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
 
 @router.post("/{project_id}/tasks/{task_id}/specifications", response_model=SpecificationResponse, status_code=status.HTTP_201_CREATED)
 async def create_specification(

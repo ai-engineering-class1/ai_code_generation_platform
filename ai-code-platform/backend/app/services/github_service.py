@@ -131,7 +131,42 @@ class GitHubService:
         except Exception as e:
             print(f"Error creating branch: {e}")
             return False
-    
+    async def get_workflow_run_jobs(self, run_id: int) -> Optional[Dict[str, Any]]:
+        """Fetch detailed job information for a workflow run"""
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{self.base_url}/repos/{self.config.repo_owner}/{self.config.repo_name}/actions/runs/{run_id}/jobs",
+                    headers=self.headers
+                )
+
+                if response.status_code == 200:
+                    return response.json()
+                else:
+                    print(f"Failed to fetch workflow jobs: {response.status_code}")
+                    return None
+        except Exception as e:
+            print(f"Error fetching workflow jobs: {e}")
+            return None
+
+    async def get_workflow_run_details(self, run_id: int) -> Optional[Dict[str, Any]]:
+        """Fetch detailed workflow run information"""
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{self.base_url}/repos/{self.config.repo_owner}/{self.config.repo_name}/actions/runs/{run_id}",
+                    headers=self.headers
+                )
+
+                if response.status_code == 200:
+                    return response.json()
+                else:
+                    print(f"Failed to fetch workflow run details: {response.status_code}")
+                    return None
+        except Exception as e:
+            print(f"Error fetching workflow run details: {e}")
+            return None
+            
     async def create_file(self, file_path: str, content: str, branch: str, message: str) -> bool:
         """Create or update a file in repository"""
         try:
