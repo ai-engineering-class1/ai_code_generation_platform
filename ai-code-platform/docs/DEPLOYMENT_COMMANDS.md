@@ -397,6 +397,23 @@ df -h
 sudo journalctl -u docker -n 50
 ```
 
+### Database Migration
+
+After deploying, run database migrations if the schema has changed:
+
+```bash
+# Run the migration script inside the backend container
+docker exec -it Lee-ai-code-platform-backend python update_db_schema.py
+```
+
+This script will:
+- Add missing columns (e.g., `is_robot`, `organization_id`)
+- Create new tables for RBAC and organizations
+- Seed initial roles and permissions
+- Set up database indexes and triggers
+
+**Note:** The migration script is idempotent - safe to run multiple times.
+
 ---
 
 ## Manual Commands Reference
