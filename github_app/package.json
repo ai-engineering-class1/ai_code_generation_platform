@@ -1,0 +1,38 @@
+{
+  "name": "code-generation-platform",
+  "version": "1.0.0",
+  "description": "A GitHub App for creating repositories, branches, pulling, adding files, committing, pushing, and creating pull requests",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "jest",
+    "test:unit": "jest __tests__",
+    "cleanup": "node cleanup-test-repos.js",
+    "docs": "swagger-jsdoc -d swaggerDef.js ./index.js -o swagger.json"
+  },
+  "keywords": [
+    "github",
+    "github-app",
+    "api",
+    "automation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.27.0",
+    "@octokit/auth-app": "^6.0.3",
+    "@octokit/rest": "^20.0.2",
+    "axios": "^1.13.2",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-fileupload": "^1.4.3",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.0",
+    "unzipper": "^0.10.11"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "nodemon": "^3.1.11"
+  }
+}
