@@ -235,7 +235,9 @@ export default function NotificationBell() {
                         )}
                         <p className="mt-1 text-xs text-gray-400 flex items-center gap-1">
                           <Clock className="h-3 w-3" />
-                          {notification.createdAt ? formatNotificationTime(notification.createdAt) : 'Unknown time'}
+                          {(notification as { createdAt?: string; created_at?: string }).createdAt ?? (notification as { createdAt?: string; created_at?: string }).created_at
+                            ? formatNotificationTime((notification as { createdAt?: string; created_at?: string }).createdAt ?? (notification as { createdAt?: string; created_at?: string }).created_at!)
+                            : 'Unknown time'}
                         </p>
                       </div>
                     </div>

@@ -4,6 +4,9 @@ from app.models.user import User
 from app.models.project import Project
 from app.models.task import Task
 from typing import Optional, List
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def create_notification(
@@ -28,6 +31,7 @@ def create_notification(
         read=False
     )
     db.add(notification)
+    logger.info(f"[NOTIFICATION] Created notification: notification_id={notification.id}, user_id={user_id}, type={notification_type.value}, title='{title}', project_id={project_id}, task_id={task_id}")
     return notification
 
 

@@ -184,3 +184,5 @@ class TaskDetailResponse(TaskResponse):
     latest_activity_status: Optional[str] = Field(None, alias="latestActivityStatus")
     latest_activity_role: Optional[str] = Field(None, alias="latestActivityRole")
 
+    model_config = {"from_attributes": True, "populate_by_name": True, "serialize_by_alias": True}
+

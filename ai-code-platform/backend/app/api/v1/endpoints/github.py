@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request, Body
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from app.core.database import get_db
 from app.core.security import get_current_active_user
 from app.models.user import User
@@ -23,6 +24,37 @@ import httpx
 import gzip
 import tarfile
 import io
+import logging
+import sys
+import platform
+
+logger = logging.getLogger(__name__)
+
+# For popup dialog on Windows (commented out; uncomment if needed for testing)
+# def show_webhook_popup(event_type: str, action: str, repo: str = ""):
+#     """Show a popup dialog when webhook is received (for testing)"""
+#     try:
+#         logger.info(f"[POPUP] Attempting to show popup: event_type={event_type}, action={action}, repo={repo}")
+#         if platform.system() == "Windows":
+#             import ctypes
+#             message = f"GitHub Webhook Received!\n\nEvent Type: {event_type}\nAction: {action}"
+#             if repo:
+#                 message += f"\nRepository: {repo}"
+#             logger.info(f"[POPUP] Showing Windows message box...")
+#             # Use MB_SYSTEMMODAL (0x1000) to bring window to front
+#             result = ctypes.windll.user32.MessageBoxW(0, message, "GitHub Webhook Alert", 0x1000 | 0x40 | 0x1)  # MB_SYSTEMMODAL | MB_ICONINFORMATION | MB_OK
+#             logger.info(f"[POPUP] Message box shown, result: {result}")
+#         else:
+#             # For non-Windows, use print (could use tkinter if needed)
+#             print(f"\n{'='*60}")
+#             print(f"WEBHOOK RECEIVED - Event: {event_type}, Action: {action}")
+#             if repo:
+#                 print(f"Repository: {repo}")
+#             print(f"{'='*60}\n")
+#             logger.info(f"[POPUP] Non-Windows system, printed to console")
+#     except Exception as e:
+#         # Don't fail webhook processing if popup fails
+#         logger.error(f"[POPUP] Could not show webhook popup: {e}", exc_info=True)
 
 router = APIRouter()
 
@@ -82,6 +114,122 @@ def find_tasks_for_project(db: Session, project_id: str):
     return db.query(Task).filter(Task.project_id == project_id).all()
 
 
+def extract_webhook_branch_and_pr(event_type: str, payload: dict) -> tuple[list[str], list[int]]:
+    """Extract branch name(s) and PR number(s) from webhook payload for matching tasks.
+    Returns (list of branch names, list of PR numbers)."""
+    branches: list[str] = []
+    pr_numbers: list[int] = []
+    if event_type == "workflow_run":
+        wr = payload.get("workflow_run") or {}
+        head_branch = wr.get("head_branch")
+        if head_branch:
+            branches.append(head_branch)
+        for pr in wr.get("pull_requests") or []:
+            num = pr.get("number")
+            if num is not None:
+                pr_numbers.append(int(num))
+    elif event_type == "pull_request":
+        pr = payload.get("pull_request") or {}
+        head = pr.get("head") or {}
+        ref = head.get("ref")
+        if ref:
+            branches.append(ref)
+        num = pr.get("number")
+        if num is not None:
+            pr_numbers.append(int(num))
+    elif event_type == "push":
+        ref = payload.get("ref", "")
+        if ref.startswith("refs/heads/"):
+            branches.append(ref.replace("refs/heads/", "", 1))
+        elif ref:
+            branches.append(ref)
+    return (branches, pr_numbers)
+
+
+def _normalize_branch_or_title(s: str) -> str:
+    """Normalize for comparison: lowercase, collapse spaces/dashes to a single form."""
+    if not s:
+        return ""
+    s = s.lower().strip()
+    # Replace spaces and underscores with dash, then collapse repeated dashes
+    s = re.sub(r"[\s_]+", "-", s)
+    s = re.sub(r"-+", "-", s).strip("-")
+    return s
+
+
+def find_tasks_by_branch_title_match(db: Session, project_id: str, branches: list[str]) -> list:
+    """Find tasks in project whose title matches one of the branch names (e.g. branch 2026-01-18-New-Project -> task '2026-01-18-New Project')."""
+    if not branches:
+        return []
+    normalized_branches = {_normalize_branch_or_title(b) for b in branches}
+    if not normalized_branches:
+        return []
+    all_tasks = db.query(Task).filter(Task.project_id == project_id).all()
+    matched = []
+    for t in all_tasks:
+        title_norm = _normalize_branch_or_title(t.title or "")
+        if title_norm and title_norm in normalized_branches:
+            matched.append(t)
+    return matched
+
+
+def find_tasks_by_branch_prefix_task_id(db: Session, project_id: str, branches: list[str]) -> list:
+    """Find tasks when branch name is created by API as prefix/task_id (e.g. ai-generated/abc-123-uuid).
+    Uses project's GitHubConfiguration.branch_prefix. Handles both app-created and third-party branches using same convention."""
+    if not branches:
+        return []
+    github_config = db.query(GitHubConfiguration).filter(
+        GitHubConfiguration.project_id == project_id
+    ).first()
+    if not github_config or not (github_config.branch_prefix or "").strip():
+        return []
+    prefix = (github_config.branch_prefix or "").strip().lower()
+    if not prefix:
+        return []
+    # Branch format: "prefix/task_id" (task_id can be UUID or slug)
+    prefix_slash = prefix + "/"
+    task_ids_from_branches = []
+    for b in branches:
+        if not b:
+            continue
+        b_lower = b.lower()
+        if b_lower.startswith(prefix_slash):
+            rest = b[len(prefix_slash):].strip()
+            if rest:
+                task_ids_from_branches.append(rest)
+    if not task_ids_from_branches:
+        return []
+    # Resolve task_id: branch suffix must equal Task.id in this project
+    all_tasks = db.query(Task).filter(Task.project_id == project_id).all()
+    matched = [t for t in all_tasks if t.id and t.id in task_ids_from_branches]
+    return list({t.id: t for t in matched}.values())
+
+
+def find_tasks_related_to_webhook(
+    db: Session, project_id: str, event_type: str, payload: dict
+) -> list:
+    """Find tasks that are related to this webhook (have a code generation matching branch or PR).
+    Only returns tasks that have at least one CodeGeneration with matching github_branch or github_pr_number."""
+    branches, pr_numbers = extract_webhook_branch_and_pr(event_type, payload)
+    if not branches and not pr_numbers:
+        return []
+    # Tasks in this project that have a CodeGeneration matching branch or PR
+    q = (
+        db.query(Task)
+        .join(CodeGeneration, CodeGeneration.task_id == Task.id)
+        .filter(Task.project_id == project_id)
+    )
+    conditions = []
+    if branches:
+        conditions.append(CodeGeneration.github_branch.in_(branches))
+    if pr_numbers:
+        conditions.append(CodeGeneration.github_pr_number.in_(pr_numbers))
+    if conditions:
+        q = q.filter(or_(*conditions))
+    # Distinct tasks (a task might match via multiple code generations)
+    return list({t.id: t for t in q.all()}.values())
+
+
 async def log_webhook_to_activity(
     db: Session,
     event_type: str,
@@ -114,18 +262,36 @@ async def log_webhook_to_activity(
         activity_service = ActivityLogService()
         total_activities_created = 0
         
-        # Process each project and its tasks
+        # Process each project: create activity only for tasks that match webhook (by CodeGeneration branch/PR or by branch name -> task title)
         for project in projects:
             print(f"[WEBHOOK ACTIVITY LOG] Processing project: {project.name} (ID: {project.id})")
-            tasks = find_tasks_for_project(db, project.id)
-            print(f"[WEBHOOK ACTIVITY LOG] Found {len(tasks)} task(s) for project {project.name}")
+            tasks = find_tasks_related_to_webhook(db, project.id, event_type, payload)
+            if not tasks:
+                branches, _ = extract_webhook_branch_and_pr(event_type, payload)
+                # Try matching branch name to task title (e.g. branch 2026-01-18-New-Project -> task "2026-01-18-New Project")
+                tasks = find_tasks_by_branch_title_match(db, project.id, branches)
+                if tasks:
+                    print(f"[WEBHOOK ACTIVITY LOG] Matched {len(tasks)} task(s) by branch/title for project {project.name}")
+                else:
+                    # Try prefix/task_id convention (e.g. ai-generated/<task_id> from app or third-party API)
+                    tasks = find_tasks_by_branch_prefix_task_id(db, project.id, branches)
+                    if tasks:
+                        print(f"[WEBHOOK ACTIVITY LOG] Matched {len(tasks)} task(s) by branch prefix/task_id for project {project.name}")
+                    else:
+                        # Fallback: create activity on all tasks in project so webhook events still show somewhere
+                        tasks = find_tasks_for_project(db, project.id)
+                        if tasks:
+                            print(f"[WEBHOOK ACTIVITY LOG] No branch/PR, branch-title, or prefix/task_id match; using all {len(tasks)} task(s) in project {project.name} (fallback)")
+                        else:
+                            print(f"[WEBHOOK ACTIVITY LOG] No tasks in project {project.name}, skipping")
+            else:
+                print(f"[WEBHOOK ACTIVITY LOG] Found {len(tasks)} task(s) related to webhook (branch/PR match) for project {project.name}")
             
             if not tasks:
-                # Skip if no tasks - Activity Log requires task_id
-                print(f"[WEBHOOK ACTIVITY LOG] Project {project.name} has no tasks, skipping activity log creation")
+                print(f"[WEBHOOK ACTIVITY LOG] Project {project.name} has no tasks, skipping")
                 continue
             
-            # Create activity for each task in the project
+            # Create activity for these tasks
             for task in tasks:
                 print(f"[WEBHOOK ACTIVITY LOG] Creating activity log for task: {task.id} - {task.title}")
                 try:
@@ -181,7 +347,7 @@ async def log_webhook_to_activity(
                         operator_id="github-webhook",
                         activity_type="webhook_event",
                         situation=f"Received {event_type} webhook event from repository {repo_full_name} for task '{task.title}'",
-                        task_role=f"Track GitHub repository events related to task implementation"
+                        task_role=f"Track GitHub repository events related to task implementation from Local Test"
                     )
                     print(f"[WEBHOOK ACTIVITY LOG] Activity created with ID: {activity.id}")
                     
@@ -203,7 +369,7 @@ async def log_webhook_to_activity(
                         metadata["workflow_name"] = workflow_run.get("name")
                         metadata["workflow_url"] = workflow_run.get("html_url")
                         
-                        # Fetch error summary for failed workflows
+                        # Set prompts (error_summary) for failed workflows so every failed-workflow activity shows Prompts
                         if workflow_run.get("conclusion") == "failure":
                             run_id = workflow_run.get("id")
                             repository = workflow_run.get("repository") or payload.get("repository") or {}
@@ -211,6 +377,13 @@ async def log_webhook_to_activity(
                             if error_details and error_details.get("error_summary"):
                                 metadata["error_summary"] = error_details["error_summary"]
                                 metadata["failed_jobs_count"] = error_details.get("failed_count", 0)
+                            else:
+                                # Ensure Prompts section still appears: minimal summary with link to logs
+                                workflow_url = workflow_run.get("html_url") or ""
+                                metadata["error_summary"] = (
+                                    f"Workflow failed. View full logs: {workflow_url}" if workflow_url
+                                    else "Workflow failed. View logs in GitHub Actions."
+                                )
                     
                     activity = activity_service.update_activity(
                         db=db,
@@ -260,8 +433,8 @@ async def log_webhook_to_activity(
         if total_activities_created == 0:
             print(f"[WEBHOOK ACTIVITY LOG] ⚠️  WARNING: No activity logs were created. This might mean:")
             print(f"   - No projects matched the repository: {repo_full_name}")
-            print(f"   - Projects found but no tasks exist for them")
-            print(f"   - Activity creation failed for all tasks")
+            print(f"   - No tasks in matched projects have a code generation (branch/PR) related to this webhook")
+            print(f"   - Activity creation failed for all related tasks")
         
     except Exception as e:
         print(f"[WEBHOOK ACTIVITY LOG] ❌ ERROR creating webhook activity log: {e}")
@@ -445,7 +618,7 @@ async def fetch_workflow_error_details(repository: dict, run_id: int):
                 if job.get("conclusion") == "failure":
                     steps = job.get("steps", [])
                     failed_steps = [step for step in steps if step.get("conclusion") == "failure"]
-                    
+                    job_detail_lines = []  # optional lines from log parsing; failed steps + link go first
                     job_name = job.get("name", "Unknown Job")
                     job_id = job.get("id")
                     
@@ -554,25 +727,26 @@ async def fetch_workflow_error_details(repository: dict, run_id: int):
                                         if len(error_messages) >= 12:
                                             break
                             
-                            # Add file paths if found
+                            # Keep for this job: we'll add failed steps + link first, then these details
+                            job_detail_lines = []
                             if file_paths:
-                                for file_path in list(file_paths)[:10]:
-                                    error_summary_lines.append(f"File: {file_path}")
-                            
-                            # Add error messages directly (raw error details)
+                                for fp in list(file_paths)[:10]:
+                                    job_detail_lines.append(f"File: {fp}")
                             if error_messages:
-                                for msg in list(error_messages)[:20]:  # Limit to 20 messages
-                                    error_summary_lines.append(msg)
-                            else:
-                                error_summary_lines.append("No specific error messages found in logs.")
+                                for msg in list(error_messages)[:20]:
+                                    job_detail_lines.append(msg)
                     except Exception as log_error:
                         print(f"[WORKFLOW_ERROR_DETAILS] Error fetching logs for job {job_id}: {log_error}")
-                        error_summary_lines.append("Unable to fetch detailed logs from GitHub Actions.")
+                        job_detail_lines = []
                     
-                    # Add failed step information (minimal)
+                    # Per-job: add failed steps and log link first so the prompt shows actionable info at top
                     if failed_steps:
                         step_names = [f"Step {step.get('number', '?')}: {step.get('name', 'Unknown')}" for step in failed_steps]
                         error_summary_lines.append(f"Failed steps: {', '.join(step_names)}")
+                    job_url = job.get("html_url", "")
+                    if job_url:
+                        error_summary_lines.append(f"View full logs: {job_url}")
+                    error_summary_lines.extend(job_detail_lines)
                     
                     failed_jobs.append({
                         "name": job_name,
@@ -609,8 +783,11 @@ async def fetch_workflow_error_details(repository: dict, run_id: int):
 async def notify_webhook_event(db: Session, event_type: str, action: str, payload: dict):
     """Create notifications for all users when webhook events are received"""
     try:
+        logger.info(f"[WEBHOOK NOTIFICATION] Processing webhook event: event_type={event_type}, action={action}")
+        
         # Get all active users to notify them
         users = db.query(User).filter(User.is_active == True).all()
+        logger.info(f"[WEBHOOK NOTIFICATION] Found {len(users)} active user(s) to notify")
         
         # Determine notification details based on event type
         if event_type == "pull_request":
@@ -637,6 +814,7 @@ async def notify_webhook_event(db: Session, event_type: str, action: str, payloa
             
             notification_type = NotificationType.INFO
             action_url = pr_url if pr_url else None
+            logger.info(f"[WEBHOOK NOTIFICATION] Pull request event: PR #{pr_number} in {repo_name}, action={action}")
             
         elif event_type == "workflow_run":
             workflow_run = payload.get("workflow_run", {})
@@ -659,6 +837,7 @@ async def notify_webhook_event(db: Session, event_type: str, action: str, payloa
                 notification_type = NotificationType.INFO
             
             action_url = workflow_run.get("html_url", "")
+            logger.info(f"[WEBHOOK NOTIFICATION] Workflow run event: {workflow_name} in {repo_name}, conclusion={conclusion}")
             
         elif event_type == "push":
             ref = payload.get("ref", "")
@@ -679,6 +858,7 @@ async def notify_webhook_event(db: Session, event_type: str, action: str, payloa
             
             notification_type = NotificationType.INFO
             action_url = repository.get("html_url", "")
+            logger.info(f"[WEBHOOK NOTIFICATION] Push event: {commit_count} commit(s) to {branch} in {repo_name}")
             
         else:
             # Generic webhook event
@@ -686,10 +866,12 @@ async def notify_webhook_event(db: Session, event_type: str, action: str, payloa
             message = f"Received {event_type} event" + (f" (action: {action})" if action else "")
             notification_type = NotificationType.INFO
             action_url = None
+            logger.info(f"[WEBHOOK NOTIFICATION] Generic webhook event: {event_type}, action={action}")
         
         # Create notification for each active user
+        notifications_created = 0
         for user in users:
-            create_notification(
+            notification = create_notification(
                 db=db,
                 user_id=user.id,
                 notification_type=notification_type,
@@ -697,12 +879,14 @@ async def notify_webhook_event(db: Session, event_type: str, action: str, payloa
                 message=message,
                 action_url=action_url
             )
+            notifications_created += 1
+            logger.info(f"[WEBHOOK NOTIFICATION] Created notification for user: user_id={user.id}, notification_id={notification.id}, title='{title}'")
         
         db.commit()
-        print(f"Created webhook notification for {len(users)} users: {event_type} - {action}")
+        logger.info(f"[WEBHOOK NOTIFICATION] Successfully created {notifications_created} notification(s) for webhook event: event_type={event_type}, action={action}")
         
     except Exception as e:
-        print(f"Error creating webhook notification: {e}")
+        logger.error(f"[WEBHOOK NOTIFICATION] Error creating webhook notification: {e}", exc_info=True)
         db.rollback()
 
 
@@ -1007,6 +1191,59 @@ async def trigger_code_generation(
     }
 
 
+@router.post("/register-branch/{task_id}")
+def register_branch_for_task(
+    task_id: str,
+    body: dict = Body(default=dict),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Register a branch name to a task so webhook events (push/PR/workflow) are attributed to this task.
+    Use when a branch is created by a third-party API with an arbitrary name; call this after creating the branch.
+    Body: { \"branch\": \"feature/xyz-123\" } or { \"branch_name\": \"...\" }."""
+    branch_name = (body.get("branch") or body.get("branch_name") or "").strip()
+    if not branch_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Request body must include 'branch' or 'branch_name' (the GitHub branch name)."
+        )
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    project = db.query(Project).filter(Project.id == task.project_id).first()
+    if not project:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Project not found")
+    spec = db.query(Specification).filter(Specification.task_id == task_id).order_by(Specification.version.desc()).first()
+    if not spec:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Task has no specification. Create and approve a specification first, or use branch name in form <branch_prefix>/<task_id> so webhooks can match by prefix/task_id."
+        )
+    existing = db.query(CodeGeneration).filter(
+        CodeGeneration.task_id == task_id,
+        CodeGeneration.github_branch == branch_name
+    ).first()
+    if existing:
+        return {"message": "Branch already registered to this task", "task_id": task_id, "branch": branch_name}
+    # Update existing CodeGeneration for this task to use this branch, or create one
+    code_gen = db.query(CodeGeneration).filter(CodeGeneration.task_id == task_id).order_by(CodeGeneration.created_at.desc()).first()
+    if code_gen:
+        code_gen.github_branch = branch_name
+        db.commit()
+        db.refresh(code_gen)
+        return {"message": "Branch registered to existing code generation", "task_id": task_id, "branch": branch_name, "code_generation_id": code_gen.id}
+    new_code_gen = CodeGeneration(
+        task_id=task_id,
+        specification_id=spec.id,
+        github_branch=branch_name,
+        status=CodeGenerationStatus.GENERATING
+    )
+    db.add(new_code_gen)
+    db.commit()
+    db.refresh(new_code_gen)
+    return {"message": "Branch registered to task", "task_id": task_id, "branch": branch_name, "code_generation_id": new_code_gen.id}
+
+
 async def trigger_github_workflow(
     github_service: GitHubService,
     task_id: str,
@@ -1052,6 +1289,10 @@ async def github_webhook(
                 repository = workflow_run.get("repository", {}) or payload.get("repository", {})
                 print(f"   [DEBUG] workflow_run event - extracted repository from workflow_run")
         
+        # Show popup dialog for testing (commented out; uncomment if needed)
+        # repo_name = repository.get("full_name", "") if isinstance(repository, dict) else ""
+        # show_webhook_popup(event_type or "unknown", action or "unknown", repo_name)
+        
         # Create Activity Log entries for webhook events (this creates activities for all tasks in matching projects)
         print("\n[WEBHOOK] Creating activity log entries...")
         try:
@@ -1065,7 +1306,13 @@ async def github_webhook(
             # But log the error so we can debug
         
         # Create notification for webhook event
-        await notify_webhook_event(db, event_type, action, payload)
+        try:
+            logger.info(f"[WEBHOOK] Creating notifications for webhook event: event_type={event_type}, action={action}")
+            await notify_webhook_event(db, event_type, action, payload)
+            logger.info(f"[WEBHOOK] ✅ Notification creation completed for event: event_type={event_type}, action={action}")
+        except Exception as notify_error:
+            logger.error(f"[WEBHOOK] ❌ ERROR creating notification: {notify_error}", exc_info=True)
+            # Continue processing even if notification fails
         
         # Handle specific event types (for updating PipelineExecution, CodeGeneration, etc.)
         if event_type == "pull_request":
