@@ -623,8 +623,10 @@ export default function TaskDetailPage({
         currentStage: task.currentStage || 'requirement',
       })
 
-      // Auto-detect active agent task from workflow history
-      const activeActivity = task.workflowHistory?.find(
+      // Auto-detect active agent task from workflow history (support both camelCase and snake_case)
+      const history = (task as { workflowHistory?: WorkflowHistory[]; workflow_history?: WorkflowHistory[] }).workflowHistory
+        ?? (task as { workflowHistory?: WorkflowHistory[]; workflow_history?: WorkflowHistory[] }).workflow_history
+      const activeActivity = history?.find(
         (a: any) => a.status === 'in_progress' || a.status === 'running'
       )
       if (activeActivity) {
@@ -680,7 +682,7 @@ export default function TaskDetailPage({
       const response = await apiClient.post(url)
       return response.data
     },
-    onSuccess: (activity) => {
+    onSuccess: async (activity) => {
       // activity is the ActivityLog object
       // Backend returns 'workflow_metadata' (renamed from metadata)
       if (activity.workflow_metadata?.remote_task_id) {
@@ -688,7 +690,9 @@ export default function TaskDetailPage({
         setCurrentActivityId(activity.id)
         setLastSyncedStatus('dispatched') // Initial status
       }
-      queryClient.invalidateQueries({ queryKey: ['task', projectId, taskId] })
+      // Refetch task so Active Activity and Activity Log show the new "Remote Agent Execution" entry
+      await queryClient.invalidateQueries({ queryKey: ['task', projectId, taskId] })
+      await queryClient.refetchQueries({ queryKey: ['task', projectId, taskId] })
       alert(`Task assigned to agent! Remote Task ID: ${activity.workflow_metadata?.remote_task_id}`)
     },
     onError: (error: any) => {
@@ -704,13 +708,15 @@ export default function TaskDetailPage({
         })
         return response.data
       },
-      onSuccess: (activity) => {
+      onSuccess: async (activity) => {
         if (activity.workflow_metadata?.remote_task_id) {
           setAgentTaskId(activity.workflow_metadata.remote_task_id)
           setCurrentActivityId(activity.id)
           setLastSyncedStatus('dispatched')
         }
-        queryClient.invalidateQueries({ queryKey: ['task', projectId, taskId] })
+        // Refetch task so Active Activity and Activity Log show the new entry
+        await queryClient.invalidateQueries({ queryKey: ['task', projectId, taskId] })
+        await queryClient.refetchQueries({ queryKey: ['task', projectId, taskId] })
         setIsAssignAgentModalOpen(false)
         setAssignAgentPrompts('')
         setAssignAgentRepoUrl('')
@@ -762,15 +768,21 @@ export default function TaskDetailPage({
     },
   })
 
-  // Derived state for activities
-  const sortedActivities = [...(task?.workflowHistory || [])].sort((a, b) => {
-    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  // Derived state for activities (support both camelCase and snake_case from API)
+  const workflowHistory = (task as { workflowHistory?: WorkflowHistory[]; workflow_history?: WorkflowHistory[] })?.workflowHistory
+    ?? (task as { workflowHistory?: WorkflowHistory[]; workflow_history?: WorkflowHistory[] })?.workflow_history
+    ?? []
+  const sortedActivities = [...workflowHistory].sort((a, b) => {
+    const createdA = (a as { createdAt?: string; created_at?: string }).createdAt ?? (a as { createdAt?: string; created_at?: string }).created_at
+    const createdB = (b as { createdAt?: string; created_at?: string }).createdAt ?? (b as { createdAt?: string; created_at?: string }).created_at
+    return new Date(createdB || 0).getTime() - new Date(createdA || 0).getTime()
   })
 
   // Split into Active (in_progress) and Past (log)
-  // Fix: Exclude "dead" activities that might have an end time but stuck status (from previous bugs)
+  // Support both camelCase (activityEndAt) and snake_case (activity_end_at) from API
+  const activityEndAt = (a: WorkflowHistory) => (a as { activityEndAt?: string; activity_end_at?: string }).activityEndAt ?? (a as { activityEndAt?: string; activity_end_at?: string }).activity_end_at
   const activeActivities = sortedActivities.filter(a =>
-    (a.status === 'in_progress' || a.status === 'running' || a.status === 'pending_user_input' || a.status === 'pending') && !a.activityEndAt
+    (a.status === 'in_progress' || a.status === 'running' || a.status === 'pending_user_input' || a.status === 'pending') && !activityEndAt(a)
   )
 
   // Filter Past Activities based on Search Criteria
