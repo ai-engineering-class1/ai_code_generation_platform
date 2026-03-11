@@ -5,9 +5,9 @@ from app.core.database import get_db
 from app.core.security import get_current_active_user
 from app.models.user import User
 from app.models.project import Project
-from app.models.task import Task, TaskStage, TaskStatus
+from app.models.task import Task, TaskStage, TaskStatus, TaskWorkflowHistory
 from app.models.integration import GitHubConfiguration
-from app.models.workflow import Specification, CodeGeneration, CodeGenerationStatus, PipelineExecution, PipelineType, PipelineStatus
+from app.models.workflow import Specification, CodeGeneration, CodeGenerationStatus, TaskBranchRegistry, PipelineExecution, PipelineType, PipelineStatus
 from app.schemas.integration import GitHubConfigCreate, GitHubConfigUpdate, GitHubConfigResponse
 from app.services.github_service import GitHubService
 from app.services.claude_service import ClaudeService
@@ -173,19 +173,21 @@ def find_tasks_by_branch_title_match(db: Session, project_id: str, branches: lis
     return matched
 
 
+# Default branch prefix used when registering at Assign-to-agent and when matching webhooks (if project has none set)
+DEFAULT_BRANCH_PREFIX = "ai-generated"
+
+
 def find_tasks_by_branch_prefix_task_id(db: Session, project_id: str, branches: list[str]) -> list:
     """Find tasks when branch name is created by API as prefix/task_id (e.g. ai-generated/abc-123-uuid).
-    Uses project's GitHubConfiguration.branch_prefix. Handles both app-created and third-party branches using same convention."""
+    Uses project's GitHubConfiguration.branch_prefix, or DEFAULT_BRANCH_PREFIX so Assign-to-agent registration matches."""
     if not branches:
         return []
     github_config = db.query(GitHubConfiguration).filter(
         GitHubConfiguration.project_id == project_id
     ).first()
-    if not github_config or not (github_config.branch_prefix or "").strip():
-        return []
-    prefix = (github_config.branch_prefix or "").strip().lower()
+    prefix = (github_config.branch_prefix or "").strip().lower() if github_config else ""
     if not prefix:
-        return []
+        prefix = DEFAULT_BRANCH_PREFIX.lower()
     # Branch format: "prefix/task_id" (task_id can be UUID or slug)
     prefix_slash = prefix + "/"
     task_ids_from_branches = []
@@ -208,12 +210,12 @@ def find_tasks_by_branch_prefix_task_id(db: Session, project_id: str, branches: 
 def find_tasks_related_to_webhook(
     db: Session, project_id: str, event_type: str, payload: dict
 ) -> list:
-    """Find tasks that are related to this webhook (have a code generation matching branch or PR).
-    Only returns tasks that have at least one CodeGeneration with matching github_branch or github_pr_number."""
+    """Find tasks that are related to this webhook (CodeGeneration or task_branch_registry matching branch/PR)."""
     branches, pr_numbers = extract_webhook_branch_and_pr(event_type, payload)
     if not branches and not pr_numbers:
         return []
-    # Tasks in this project that have a CodeGeneration matching branch or PR
+    seen = {}
+    # 1) Tasks with CodeGeneration matching branch or PR
     q = (
         db.query(Task)
         .join(CodeGeneration, CodeGeneration.task_id == Task.id)
@@ -226,8 +228,95 @@ def find_tasks_related_to_webhook(
         conditions.append(CodeGeneration.github_pr_number.in_(pr_numbers))
     if conditions:
         q = q.filter(or_(*conditions))
-    # Distinct tasks (a task might match via multiple code generations)
-    return list({t.id: t for t in q.all()}.values())
+    for t in q.all():
+        seen[t.id] = t
+    # 2) Tasks with branch in task_branch_registry (works when task has no Specification)
+    if branches:
+        q2 = (
+            db.query(Task)
+            .join(TaskBranchRegistry, TaskBranchRegistry.task_id == Task.id)
+            .filter(Task.project_id == project_id, TaskBranchRegistry.branch_name.in_(branches))
+        )
+        for t in q2.all():
+            seen[t.id] = t
+    return list(seen.values())
+
+
+def find_task_with_active_agent_execution(db: Session, project_id: str):
+    """Return the single task in this project that has an active Remote Agent Execution (activity_end_at is null).
+    Returns None if zero or more than one such task (so we don't guess)."""
+    subq = (
+        db.query(TaskWorkflowHistory.task_id)
+        .filter(
+            TaskWorkflowHistory.activity_type == "agent_execution",
+            TaskWorkflowHistory.activity_end_at.is_(None),
+        )
+        .distinct()
+    )
+    tasks = (
+        db.query(Task)
+        .filter(Task.project_id == project_id, Task.id.in_(subq))
+        .all()
+    )
+    if len(tasks) != 1:
+        return None
+    return tasks[0]
+
+
+def pick_single_task_for_webhook(db: Session, project_id: str, tasks: list) -> list:
+    """When multiple tasks match the same webhook (e.g. same branch in registry), return only the one
+    that should receive the webhook: the task with an active Remote Agent Execution, or the most recent one.
+    This avoids sending the same webhook to old tasks that still have the branch registered."""
+    if not tasks or len(tasks) <= 1:
+        return tasks
+    # Prefer task(s) that have an active agent execution; among those, pick the one with latest activity_start_at
+    from sqlalchemy import desc
+    active_task_ids = (
+        db.query(TaskWorkflowHistory.task_id)
+        .filter(
+            TaskWorkflowHistory.activity_type == "agent_execution",
+            TaskWorkflowHistory.activity_end_at.is_(None),
+            TaskWorkflowHistory.task_id.in_([t.id for t in tasks]),
+        )
+        .distinct()
+        .all()
+    )
+    active_task_ids = [r[0] for r in active_task_ids]
+    if len(active_task_ids) == 1:
+        return [t for t in tasks if t.id == active_task_ids[0]]
+    if len(active_task_ids) > 1:
+        # Multiple active: pick the one with the most recent agent activity
+        latest = (
+            db.query(TaskWorkflowHistory.task_id)
+            .filter(
+                TaskWorkflowHistory.activity_type == "agent_execution",
+                TaskWorkflowHistory.activity_end_at.is_(None),
+                TaskWorkflowHistory.task_id.in_(active_task_ids),
+            )
+            .order_by(desc(TaskWorkflowHistory.activity_start_at))
+            .limit(1)
+            .first()
+        )
+        if latest:
+            return [t for t in tasks if t.id == latest[0]]
+    # No active agent: pick the task with the most recent agent execution (any status)
+    latest_any = (
+        db.query(TaskWorkflowHistory.task_id)
+        .filter(
+            TaskWorkflowHistory.activity_type == "agent_execution",
+            TaskWorkflowHistory.task_id.in_([t.id for t in tasks]),
+        )
+        .order_by(desc(TaskWorkflowHistory.activity_start_at))
+        .limit(1)
+        .first()
+    )
+    if latest_any:
+        return [t for t in tasks if t.id == latest_any[0]]
+    return [tasks[0]]
+
+
+# Task role used for all webhook-created activities (so they appear consistently in task_workflow_history)
+WEBHOOK_ACTIVITY_TASK_ROLE = "Track GitHub repository events related to task implementation from Local Test"
 
 
 async def log_webhook_to_activity(
@@ -278,21 +367,46 @@ async def log_webhook_to_activity(
                     if tasks:
                         print(f"[WEBHOOK ACTIVITY LOG] Matched {len(tasks)} task(s) by branch prefix/task_id for project {project.name}")
                     else:
-                        # Fallback: create activity on all tasks in project so webhook events still show somewhere
-                        tasks = find_tasks_for_project(db, project.id)
-                        if tasks:
-                            print(f"[WEBHOOK ACTIVITY LOG] No branch/PR, branch-title, or prefix/task_id match; using all {len(tasks)} task(s) in project {project.name} (fallback)")
+                        # Fallback: if exactly one task has an active "Assign to agent" (Remote Agent Execution), put webhook there
+                        fallback_task = find_task_with_active_agent_execution(db, project.id)
+                        if fallback_task:
+                            tasks = [fallback_task]
+                            print(f"[WEBHOOK ACTIVITY LOG] No branch/PR match; using task with active agent execution for project {project.name}: {fallback_task.id} - {fallback_task.title}")
                         else:
-                            print(f"[WEBHOOK ACTIVITY LOG] No tasks in project {project.name}, skipping")
+                            tasks = []
+                            print(f"[WEBHOOK ACTIVITY LOG] No branch/PR, branch-title, or prefix/task_id match for project {project.name}; skipping (webhook will not be logged to any task)")
             else:
                 print(f"[WEBHOOK ACTIVITY LOG] Found {len(tasks)} task(s) related to webhook (branch/PR match) for project {project.name}")
+            
+            # When webhook is for a default branch (e.g. main), prefer the task with active "Assign to agent" so the just-assigned task gets it
+            branches_from_webhook, _ = extract_webhook_branch_and_pr(event_type, payload)
+            default_branches = {"main", "master"}
+            if branches_from_webhook and set(b.strip().lower() for b in branches_from_webhook) <= default_branches:
+                active_agent_task = find_task_with_active_agent_execution(db, project.id)
+                if active_agent_task:
+                    tasks = [active_agent_task]
+                    print(f"[WEBHOOK ACTIVITY LOG] Using task with active agent execution for webhook (default branch): {active_agent_task.id} - {active_agent_task.title}")
+            elif len(tasks) > 1:
+                # Multiple tasks match same branch; pick the one that should get it
+                tasks = pick_single_task_for_webhook(db, project.id, tasks)
+                print(f"[WEBHOOK ACTIVITY LOG] Narrowed to 1 task for webhook: {tasks[0].id} - {tasks[0].title}")
             
             if not tasks:
                 print(f"[WEBHOOK ACTIVITY LOG] Project {project.name} has no tasks, skipping")
                 continue
+
+            # Branch(es) from this webhook - used to register branch to task when known (Option B)
+            branches_from_webhook, _ = extract_webhook_branch_and_pr(event_type, payload)
             
             # Create activity for these tasks
             for task in tasks:
+                # Register the webhook's actual branch to this task so future webhooks match by branch/PR
+                if branches_from_webhook:
+                    try:
+                        register_branch_for_task_impl(db, task.id, branches_from_webhook[0])
+                        print(f"[WEBHOOK ACTIVITY LOG] Registered branch '{branches_from_webhook[0]}' to task {task.id} for future webhook matching")
+                    except ValueError as e:
+                        print(f"[WEBHOOK ACTIVITY LOG] Could not register branch to task {task.id}: {e}")
                 print(f"[WEBHOOK ACTIVITY LOG] Creating activity log for task: {task.id} - {task.title}")
                 try:
                     # Build descriptive title based on event type and status
@@ -347,7 +461,7 @@ async def log_webhook_to_activity(
                         operator_id="github-webhook",
                         activity_type="webhook_event",
                         situation=f"Received {event_type} webhook event from repository {repo_full_name} for task '{task.title}'",
-                        task_role=f"Track GitHub repository events related to task implementation from Local Test"
+                        task_role=WEBHOOK_ACTIVITY_TASK_ROLE
                     )
                     print(f"[WEBHOOK ACTIVITY LOG] Activity created with ID: {activity.id}")
                     
@@ -1191,41 +1305,41 @@ async def trigger_code_generation(
     }
 
 
-@router.post("/register-branch/{task_id}")
-def register_branch_for_task(
-    task_id: str,
-    body: dict = Body(default=dict),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-):
+def register_branch_for_task_impl(db: Session, task_id: str, branch_name: str) -> dict:
     """Register a branch name to a task so webhook events (push/PR/workflow) are attributed to this task.
-    Use when a branch is created by a third-party API with an arbitrary name; call this after creating the branch.
-    Body: { \"branch\": \"feature/xyz-123\" } or { \"branch_name\": \"...\" }."""
-    branch_name = (body.get("branch") or body.get("branch_name") or "").strip()
-    if not branch_name:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Request body must include 'branch' or 'branch_name' (the GitHub branch name)."
-        )
+    Reusable from HTTP endpoint or from assign-to-agent flow.
+    If task has a Specification: uses code_generations table. If not: uses task_branch_registry table.
+    Returns dict with message, task_id, branch; optionally code_generation_id.
+    Raises ValueError only if task not found or project not found."""
+    if not (branch_name or "").strip():
+        raise ValueError("Branch name is required")
+    branch_name = branch_name.strip()
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        raise ValueError("Task not found")
     project = db.query(Project).filter(Project.id == task.project_id).first()
     if not project:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Project not found")
+        raise ValueError("Project not found")
     spec = db.query(Specification).filter(Specification.task_id == task_id).order_by(Specification.version.desc()).first()
     if not spec:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Task has no specification. Create and approve a specification first, or use branch name in form <branch_prefix>/<task_id> so webhooks can match by prefix/task_id."
-        )
+        # No spec: register in task_branch_registry so webhooks still match (no code_generations row)
+        existing = db.query(TaskBranchRegistry).filter(
+            TaskBranchRegistry.task_id == task_id,
+            TaskBranchRegistry.branch_name == branch_name
+        ).first()
+        if existing:
+            return {"message": "Branch already registered to this task (registry)", "task_id": task_id, "branch": branch_name}
+        reg = TaskBranchRegistry(task_id=task_id, branch_name=branch_name)
+        db.add(reg)
+        db.commit()
+        db.refresh(reg)
+        return {"message": "Branch registered to task (registry, no spec)", "task_id": task_id, "branch": branch_name}
     existing = db.query(CodeGeneration).filter(
         CodeGeneration.task_id == task_id,
         CodeGeneration.github_branch == branch_name
     ).first()
     if existing:
         return {"message": "Branch already registered to this task", "task_id": task_id, "branch": branch_name}
-    # Update existing CodeGeneration for this task to use this branch, or create one
     code_gen = db.query(CodeGeneration).filter(CodeGeneration.task_id == task_id).order_by(CodeGeneration.created_at.desc()).first()
     if code_gen:
         code_gen.github_branch = branch_name
@@ -1242,6 +1356,33 @@ def register_branch_for_task(
     db.commit()
     db.refresh(new_code_gen)
     return {"message": "Branch registered to task", "task_id": task_id, "branch": branch_name, "code_generation_id": new_code_gen.id}
+
+
+@router.post("/register-branch/{task_id}")
+def register_branch_for_task(
+    task_id: str,
+    body: dict = Body(default=dict),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Register a branch name to a task so webhook events (push/PR/workflow) are attributed to this task.
+    Use when a branch is created by a third-party API with an arbitrary name; call this after creating the branch.
+    Body: { \"branch\": \"feature/xyz-123\" } or { \"branch_name\": \"...\" }."""
+    branch_name = (body.get("branch") or body.get("branch_name") or "").strip()
+    if not branch_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Request body must include 'branch' or 'branch_name' (the GitHub branch name)."
+        )
+    try:
+        return register_branch_for_task_impl(db, task_id, branch_name)
+    except ValueError as e:
+        err = str(e)
+        if "Task not found" in err:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=err)
+        if "Project not found" in err:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=err)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=err)
 
 
 async def trigger_github_workflow(

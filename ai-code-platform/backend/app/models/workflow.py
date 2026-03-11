@@ -65,6 +65,19 @@ class PipelineStatus(str, enum.Enum):
     FAILED = "failed"
 
 
+class TaskBranchRegistry(Base):
+    """Maps a branch name to a task for webhook matching. Used when task has no Specification (so we can't use code_generations)."""
+    __tablename__ = "task_branch_registry"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    task_id = Column(String, ForeignKey("tasks.id"), nullable=False)
+    branch_name = Column(String(255), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # One task can have multiple branches registered (e.g. retries with different branch names)
+    __table_args__ = ()
+
+
 class PipelineExecution(Base):
     __tablename__ = "pipeline_executions"
     

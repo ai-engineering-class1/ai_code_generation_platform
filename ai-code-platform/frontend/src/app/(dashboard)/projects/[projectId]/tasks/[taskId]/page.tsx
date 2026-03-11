@@ -778,17 +778,16 @@ export default function TaskDetailPage({
     return new Date(createdB || 0).getTime() - new Date(createdA || 0).getTime()
   })
 
-  // Split into Active (in_progress) and Past (log)
+  // Split into Active (no end time) and Past (log)
   // Support both camelCase (activityEndAt) and snake_case (activity_end_at) from API
   const activityEndAt = (a: WorkflowHistory) => (a as { activityEndAt?: string; activity_end_at?: string }).activityEndAt ?? (a as { activityEndAt?: string; activity_end_at?: string }).activity_end_at
-  const activeActivities = sortedActivities.filter(a =>
-    (a.status === 'in_progress' || a.status === 'running' || a.status === 'pending_user_input' || a.status === 'pending') && !activityEndAt(a)
-  )
+  // Any activity without activity_end_at is active (so Assign to agent / webhook events always show)
+  const activeActivities = sortedActivities.filter(a => !activityEndAt(a))
 
   // Filter Past Activities based on Search Criteria
   const filteredPastActivities = sortedActivities.filter(a => {
-    // 1. Exclude active
-    if (a.status === 'in_progress' || a.status === 'running' || a.status === 'pending_user_input' || a.status === 'pending') return false
+    // 1. Exclude active (anything with no end time)
+    if (!activityEndAt(a)) return false
 
     // 2. Query (Full Text) - checks title, action, result, situation, operatorId
     if (searchFilters.query) {
