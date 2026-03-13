@@ -153,8 +153,8 @@ class WorkflowHistoryResponse(BaseModel):
     is_public: Optional[bool] = Field(True, alias="isPublic")
     task_role: Optional[str] = Field(None, serialization_alias="task")
     tie_back: Optional[str] = Field(None, alias="tieBack")
-    metadata: Optional[dict] = Field(None, alias="workflow_metadata")
-    created_at: datetime = Field(alias="createdAt")
+    workflow_metadata: Optional[dict] = Field(None, serialization_alias="workflow_metadata")
+    created_at: Optional[datetime] = Field(None, alias="createdAt")
     
     class Config:
         from_attributes = True

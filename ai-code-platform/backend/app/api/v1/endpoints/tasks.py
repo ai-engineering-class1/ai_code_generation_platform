@@ -22,6 +22,8 @@ from app.services.activity_log_service import ActivityLogService
 from app.services.notification_service import notify_task_assigned
 from app.services.openspec_service import OpenSpecService
 from app.models.task import TaskStatus, ActivityStatus, transition
+from app.models.integration import GitHubConfiguration
+from app.api.v1.endpoints.github import register_branch_for_task_impl
 from pathlib import Path
 
 router = APIRouter()
@@ -166,6 +168,10 @@ async def create_task(
     return new_task
 
 
+# Max workflow history rows to load per task (avoids slow response when many activities)
+TASK_WORKFLOW_HISTORY_LIMIT = 100
+
+
 @router.get("/{project_id}/tasks/{task_id}", response_model=TaskDetailResponse)
 async def get_task(
     project_id: str,
@@ -174,66 +180,63 @@ async def get_task(
     current_user: User = Depends(get_current_active_user)
 ):
     """Get a specific task with detailed information"""
-    # Verify project ownership
-    project = db.query(Project).filter(
-        Project.id == project_id
-    ).first()
-    
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found"
-        )
-    
     from app.models.workflow import Specification, CodeGeneration
     from app.models.task import TaskWorkflowHistory
-    
-    print(f"Fetching task: task_id={task_id}, project_id={project_id}")
-    task = db.query(Task).filter(
+
+    # Single query: task + project (saves one round-trip to DB)
+    task = db.query(Task).options(joinedload(Task.project)).filter(
         Task.id == task_id,
         Task.project_id == project_id
     ).first()
-    
+
     if not task:
-        print(f"Task not found: task_id={task_id}, project_id={project_id}")
-        # Debug: Check if task exists with different project_id
-        task_anywhere = db.query(Task).filter(Task.id == task_id).first()
-        if task_anywhere:
-            print(f"Task exists but with different project_id: {task_anywhere.project_id}")
-        else:
-            print(f"Task with id {task_id} does not exist at all")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Task not found: task_id={task_id}, project_id={project_id}"
         )
-    
-    print(f"Task found: {task.id} - {task.title}")
-    
-    # Load related data
+    if not task.project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
+
+    # Load related data (2 queries)
     task.specification = db.query(Specification).filter(
         Specification.task_id == task_id
     ).order_by(Specification.version.desc()).first()
-    
+
     task.code_generation = db.query(CodeGeneration).filter(
         CodeGeneration.task_id == task_id
     ).order_by(CodeGeneration.created_at.desc()).first()
-    
-    # Load workflow history - use try/except to handle cases where table might not exist or have issues
+
+    # Load workflow history: always include ALL active activities, plus recent completed (up to limit)
     try:
-        task.workflow_history = db.query(TaskWorkflowHistory).filter(
-            TaskWorkflowHistory.task_id == task_id
+        active = db.query(TaskWorkflowHistory).filter(
+            TaskWorkflowHistory.task_id == task_id,
+            TaskWorkflowHistory.activity_end_at.is_(None)
         ).order_by(TaskWorkflowHistory.created_at.desc()).all()
+        completed = db.query(TaskWorkflowHistory).filter(
+            TaskWorkflowHistory.task_id == task_id,
+            TaskWorkflowHistory.activity_end_at.isnot(None)
+        ).order_by(TaskWorkflowHistory.created_at.desc()).limit(TASK_WORKFLOW_HISTORY_LIMIT).all()
+        # Merge and sort by created_at desc (newest first); active stay visible
+        seen_ids = {a.id for a in active}
+        completed_only = [c for c in completed if c.id not in seen_ids]
+        task.workflow_history = active + completed_only
+        task.workflow_history.sort(key=lambda a: a.created_at or a.activity_start_at, reverse=True)
     except Exception as e:
-        print(f"Warning: Could not load workflow history: {e}")
-        # Set to empty list if query fails
+        logging.getLogger(__name__).warning("Could not load workflow history: %s", e)
         task.workflow_history = []
 
-    # Get latest activity info
-    activity_service = ActivityLogService()
-    latest_activity_info = activity_service.get_latest_activity_info(db, task_id)
-    task.latest_activity_status = latest_activity_info["status"]
-    task.latest_activity_role = latest_activity_info["task_role"]
-    
+    # Derive latest activity from loaded history (avoids extra DB round-trip)
+    if task.workflow_history:
+        latest = task.workflow_history[0]
+        task.latest_activity_status = latest.status
+        task.latest_activity_role = latest.task_role
+    else:
+        task.latest_activity_status = None
+        task.latest_activity_role = None
+
     return task
 
 
@@ -507,6 +510,21 @@ async def assign_to_agent_ci(
         activity_service = ActivityLogService()
         claude_service = ClaudeService()
 
+        # 2b. Register branch for this task so webhook events target only this task.
+        branch_name = None
+        try:
+            github_config = db.query(GitHubConfiguration).filter(
+                GitHubConfiguration.project_id == project_id
+            ).first()
+            branch_prefix = (github_config.branch_prefix or "").strip() if github_config else ""
+            if not branch_prefix:
+                branch_prefix = "ai-generated"
+            branch_name = f"{branch_prefix}/{task_id}"
+            register_branch_for_task_impl(db, task_id, branch_name)
+            logging.getLogger(__name__).info("Registered branch %s for task %s (assign to agent CI)", branch_name, task_id)
+        except ValueError as e:
+            logging.getLogger(__name__).warning("Could not register branch for task %s: %s", task_id, e)
+
         # 3. STAR: Start Activity (Situation, Task)
         activity = activity_service.start_activity(
             db=db,
@@ -524,11 +542,14 @@ async def assign_to_agent_ci(
             remote_task_id = result.get("taskId")
 
             # 5. STAR: Update Activity (Action) with success
+            meta = {"remote_task_id": remote_task_id, "remote_status": "dispatched", "custom_prompts": prompts}
+            if branch_name:
+                meta["branch_name"] = branch_name
             activity = activity_service.update_activity(
                 db=db,
                 activity_id=activity.id,
                 action=f"Successfully dispatched task to remote agent.\nRemote Task ID: {remote_task_id}.\nPrompt: {prompts[:200]}{'...' if len(prompts) > 200 else ''}\nWaiting for results via polling...",
-                metadata={"remote_task_id": remote_task_id, "remote_status": "dispatched", "custom_prompts": prompts}
+                metadata=meta
             )
 
             # Return activity so frontend can start polling 'remote_task_id'
@@ -674,15 +695,11 @@ async def assign_to_agent(
         if repo_url and repo_url.endswith(".git"):
             repo_url = repo_url[:-4]
             
-        if not repo_url:
-             # Fallback: Check GitHubConfiguration
-             from app.models.integration import GitHubConfiguration
-             github_config = db.query(GitHubConfiguration).filter(
-                 GitHubConfiguration.project_id == project_id
-             ).first()
-             
-             if github_config:
-                 repo_url = f"https://github.com/{github_config.repo_owner}/{github_config.repo_name}"
+        github_config = db.query(GitHubConfiguration).filter(
+            GitHubConfiguration.project_id == project_id
+        ).first()
+        if not repo_url and github_config:
+            repo_url = f"https://github.com/{github_config.repo_owner}/{github_config.repo_name}"
 
         if not repo_url:
              raise HTTPException(status_code=400, detail="Project repository URL (GitHub) is missing.")
@@ -697,6 +714,18 @@ async def assign_to_agent(
         except Exception as e:
             # Non-blocking; log and continue
             print(f"Warning: failed to seed OpenSpec before remote agent dispatch: {e}")
+
+        # 2b. Register branch for this task so webhook events (push/PR/workflow) target only this task.
+        branch_name = None
+        try:
+            branch_prefix = (github_config.branch_prefix or "").strip() if github_config else ""
+            if not branch_prefix:
+                branch_prefix = "ai-generated"
+            branch_name = f"{branch_prefix}/{task_id}"
+            register_branch_for_task_impl(db, task_id, branch_name)
+            logging.getLogger(__name__).info("Registered branch %s for task %s (assign to agent)", branch_name, task_id)
+        except ValueError as e:
+            logging.getLogger(__name__).warning("Could not register branch for task %s: %s", task_id, e)
 
         # Handle Source Activity (if transferring from an existing activity)
         if source_activity_id:
@@ -740,11 +769,14 @@ async def assign_to_agent(
             
             # 5. STAR: Update Activity (Action) with success
             # CRITICAL: Capture the returned/refreshed activity object!
+            meta = {"remote_task_id": remote_task_id, "remote_status": "dispatched"}
+            if branch_name:
+                meta["branch_name"] = branch_name
             activity = activity_service.update_activity(
                 db=db,
                 activity_id=activity.id,
                 action=f"Successfully dispatched task to remote agent.\nRemote Task ID: {remote_task_id}.\nPrompt: Please implement the OpenSpec change under openspec/changes\nWaiting for results via polling...",
-                metadata={"remote_task_id": remote_task_id, "remote_status": "dispatched"}
+                metadata=meta
             )
             
             # Return activity so frontend can start polling 'remote_task_id'
