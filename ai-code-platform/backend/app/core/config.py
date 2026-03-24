@@ -68,6 +68,15 @@ class Settings(BaseSettings):
     
     # Logging
     LOG_LEVEL: str = "INFO"
+
+    # Email (optional — when unset, failure/alert emails are logged only)
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_TLS: bool = True
+    NOTIFICATION_EMAIL_FROM: str = ""
+    APP_PUBLIC_URL: str = "http://localhost:3012"
     
     class Config:
         env_file = ".env"

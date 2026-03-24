@@ -11,9 +11,8 @@ from app.models.workflow import Specification, CodeGeneration, CodeGenerationSta
 from app.schemas.integration import GitHubConfigCreate, GitHubConfigUpdate, GitHubConfigResponse
 from app.services.github_service import GitHubService
 from app.services.claude_service import ClaudeService
-from app.services.notification_service import create_notification
+from app.services.notification_dispatch import dispatch_notification
 from app.services.activity_log_service import ActivityLogService
-from app.models.notification import NotificationType
 from app.models.task import ActivityStatus
 from app.models.user import User
 from datetime import datetime
@@ -27,6 +26,7 @@ import io
 import logging
 import sys
 import platform
+from typing import List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -313,6 +313,67 @@ def pick_single_task_for_webhook(db: Session, project_id: str, tasks: list) -> l
     if latest_any:
         return [t for t in tasks if t.id == latest_any[0]]
     return [tasks[0]]
+
+
+def _repository_dict_for_webhook(event_type: str, payload: dict) -> dict:
+    """Resolve repository object from GitHub webhook payload (same sources as notify_webhook_event)."""
+    if event_type == "workflow_run":
+        wr = payload.get("workflow_run") or {}
+        return (payload.get("repository") or wr.get("repository") or {}) or {}
+    return payload.get("repository") or {}
+
+
+def collect_webhook_stakeholder_user_ids(
+    db: Session, event_type: str, payload: dict
+) -> Tuple[List[str], Optional[str], Optional[str]]:
+    """
+    Resolve assignee + project owner user ids using the same task-matching logic as log_webhook_to_activity.
+    Returns (user_ids, first_project_id_for_deep_link, first_task_id_for_deep_link).
+    """
+    repository = _repository_dict_for_webhook(event_type, payload)
+    repo_full_name = repository.get("full_name", "") if isinstance(repository, dict) else ""
+    if not repo_full_name:
+        return [], None, None
+
+    projects = find_project_by_repository(db, repo_full_name)
+    if not projects:
+        return [], None, None
+
+    stakeholder_ids: set = set()
+    first_project_id: Optional[str] = None
+    first_task_id: Optional[str] = None
+
+    for project in projects:
+        if first_project_id is None:
+            first_project_id = project.id
+        if project.owner_id:
+            stakeholder_ids.add(project.owner_id)
+
+        tasks = find_tasks_related_to_webhook(db, project.id, event_type, payload)
+        if not tasks:
+            branches, _ = extract_webhook_branch_and_pr(event_type, payload)
+            tasks = find_tasks_by_branch_title_match(db, project.id, branches)
+            if not tasks:
+                tasks = find_tasks_by_branch_prefix_task_id(db, project.id, branches)
+            if not tasks:
+                fallback_task = find_task_with_active_agent_execution(db, project.id)
+                tasks = [fallback_task] if fallback_task else []
+        branches_from_webhook, _ = extract_webhook_branch_and_pr(event_type, payload)
+        default_branches = {"main", "master"}
+        if branches_from_webhook and set(b.strip().lower() for b in branches_from_webhook) <= default_branches:
+            active_agent_task = find_task_with_active_agent_execution(db, project.id)
+            if active_agent_task:
+                tasks = [active_agent_task]
+        elif len(tasks) > 1:
+            tasks = pick_single_task_for_webhook(db, project.id, tasks)
+
+        for task in tasks:
+            if task.assignee_id:
+                stakeholder_ids.add(task.assignee_id)
+            if first_task_id is None:
+                first_task_id = task.id
+
+    return (list(stakeholder_ids), first_project_id, first_task_id)
 
 
 # Task role used for all webhook-created activities (so they appear consistently in task_workflow_history)
@@ -895,15 +956,13 @@ async def fetch_workflow_error_details(repository: dict, run_id: int):
 
 
 async def notify_webhook_event(db: Session, event_type: str, action: str, payload: dict):
-    """Create notifications for all users when webhook events are received"""
+    """Create notifications from webhook events using severity-based routing.
+
+    Important: do NOT broadcast to all users by default (prevents Ops receiving whole webhook events).
+    """
     try:
         logger.info(f"[WEBHOOK NOTIFICATION] Processing webhook event: event_type={event_type}, action={action}")
-        
-        # Get all active users to notify them
-        users = db.query(User).filter(User.is_active == True).all()
-        logger.info(f"[WEBHOOK NOTIFICATION] Found {len(users)} active user(s) to notify")
-        
-        # Determine notification details based on event type
+
         if event_type == "pull_request":
             pull_request = payload.get("pull_request", {})
             pr_number = pull_request.get("number")
@@ -911,12 +970,14 @@ async def notify_webhook_event(db: Session, event_type: str, action: str, payloa
             pr_url = pull_request.get("html_url", "")
             repository = payload.get("repository", {})
             repo_name = repository.get("full_name", "Unknown")
-            
+            event_code = "github.pr"
+
             if action == "opened":
                 title = f"New Pull Request: #{pr_number}"
                 message = f"Pull request opened in {repo_name}: {pr_title}"
             elif action == "closed":
                 if pull_request.get("merged"):
+                    event_code = "github.pr_merged"
                     title = f"Pull Request Merged: #{pr_number}"
                     message = f"Pull request #{pr_number} was merged in {repo_name}"
                 else:
@@ -925,42 +986,40 @@ async def notify_webhook_event(db: Session, event_type: str, action: str, payloa
             else:
                 title = f"Pull Request Updated: #{pr_number}"
                 message = f"Pull request #{pr_number} was {action} in {repo_name}"
-            
-            notification_type = NotificationType.INFO
+
             action_url = pr_url if pr_url else None
-            logger.info(f"[WEBHOOK NOTIFICATION] Pull request event: PR #{pr_number} in {repo_name}, action={action}")
-            
+
         elif event_type == "workflow_run":
             workflow_run = payload.get("workflow_run", {})
             workflow_name = workflow_run.get("name", "Workflow")
             conclusion = workflow_run.get("conclusion", "unknown")
             repository = payload.get("repository", {})
             repo_name = repository.get("full_name", "Unknown")
-            
+
             if conclusion == "success":
                 title = f"Workflow Succeeded: {workflow_name}"
                 message = f"Workflow '{workflow_name}' completed successfully in {repo_name}"
-                notification_type = NotificationType.INFO
+                event_code = "workflow.completed"
             elif conclusion == "failure":
                 title = f"Workflow Failed: {workflow_name}"
                 message = f"Workflow '{workflow_name}' failed in {repo_name}"
-                notification_type = NotificationType.ERROR
+                event_code = "github.workflow_failed"
             else:
                 title = f"Workflow {action}: {workflow_name}"
                 message = f"Workflow '{workflow_name}' {action} in {repo_name}"
-                notification_type = NotificationType.INFO
-            
+                event_code = "github.workflow_neutral"
+
             action_url = workflow_run.get("html_url", "")
-            logger.info(f"[WEBHOOK NOTIFICATION] Workflow run event: {workflow_name} in {repo_name}, conclusion={conclusion}")
-            
+
         elif event_type == "push":
             ref = payload.get("ref", "")
             commits = payload.get("commits", [])
             repository = payload.get("repository", {})
             repo_name = repository.get("full_name", "Unknown")
             branch = ref.replace("refs/heads/", "") if ref.startswith("refs/heads/") else ref
-            
             commit_count = len(commits)
+            event_code = "github.push"
+
             if commit_count > 0:
                 last_commit = commits[0]
                 commit_message = last_commit.get("message", "No message")
@@ -969,38 +1028,48 @@ async def notify_webhook_event(db: Session, event_type: str, action: str, payloa
             else:
                 title = f"Push to {branch}"
                 message = f"Push event to {branch} in {repo_name}"
-            
-            notification_type = NotificationType.INFO
+
             action_url = repository.get("html_url", "")
-            logger.info(f"[WEBHOOK NOTIFICATION] Push event: {commit_count} commit(s) to {branch} in {repo_name}")
-            
+
         else:
-            # Generic webhook event
             title = f"GitHub Webhook: {event_type}"
             message = f"Received {event_type} event" + (f" (action: {action})" if action else "")
-            notification_type = NotificationType.INFO
+            event_code = "github.generic"
             action_url = None
-            logger.info(f"[WEBHOOK NOTIFICATION] Generic webhook event: {event_type}, action={action}")
-        
-        # Create notification for each active user
-        notifications_created = 0
-        for user in users:
-            notification = create_notification(
-                db=db,
-                user_id=user.id,
-                notification_type=notification_type,
-                title=title,
-                message=message,
-                action_url=action_url
-            )
-            notifications_created += 1
-            logger.info(f"[WEBHOOK NOTIFICATION] Created notification for user: user_id={user.id}, notification_id={notification.id}, title='{title}'")
-        
-        db.commit()
-        logger.info(f"[WEBHOOK NOTIFICATION] Successfully created {notifications_created} notification(s) for webhook event: event_type={event_type}, action={action}")
-        
+
+        stakeholder_ids, link_pid, link_tid = collect_webhook_stakeholder_user_ids(db, event_type, payload)
+        final_action_url = action_url
+        if link_pid and link_tid:
+            final_action_url = f"/projects/{link_pid}/tasks/{link_tid}"
+
+        notifications_created = dispatch_notification(
+            db,
+            event_code,
+            title,
+            message,
+            always_include_user_ids=stakeholder_ids or None,
+            project_id=link_pid,
+            task_id=link_tid,
+            action_url=final_action_url,
+        )
+        logger.info(
+            f"[WEBHOOK NOTIFICATION] Dispatched {notifications_created} notification(s): {event_type}/{action}"
+        )
+
     except Exception as e:
         logger.error(f"[WEBHOOK NOTIFICATION] Error creating webhook notification: {e}", exc_info=True)
+        # Best-effort: notify Ops/Managers about webhook processing failure
+        try:
+            dispatch_notification(
+                db,
+                "webhook.processing_failed",
+                "Webhook Processing Failed",
+                str(e),
+                action_url=None,
+            )
+        except Exception:
+            # Avoid masking the original exception with dispatch errors
+            pass
         db.rollback()
 
 

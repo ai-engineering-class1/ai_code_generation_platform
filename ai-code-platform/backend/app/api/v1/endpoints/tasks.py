@@ -19,7 +19,7 @@ from app.schemas.task import (
 )
 from app.services.claude_service import ClaudeService
 from app.services.activity_log_service import ActivityLogService
-from app.services.notification_service import notify_task_assigned
+from app.services.notification_service import notify_task_assigned, notify_task_status_change
 from app.services.openspec_service import OpenSpecService
 from app.models.task import TaskStatus, ActivityStatus, transition
 from app.models.integration import GitHubConfiguration
@@ -319,8 +319,9 @@ async def update_task(
             detail="Task not found"
         )
     
-    # Store old assignee_id to detect changes
+    # Store old assignee_id / status to detect changes (before applying updates)
     old_assignee_id = task.assignee_id
+    old_task_status = task.status
     print(f"DEBUG: Updating task {task_id}. Old assignee: {old_assignee_id}. Payload status: {task_data.status} Assignee: {task_data.assignee_id}")
 
     # Validation: Status Transition
@@ -387,7 +388,19 @@ async def update_task(
             except Exception as e:
                 # Log error but don't fail task update
                 print(f"Error sending assignment notification: {e}")
-    
+
+    def _status_str(s) -> str:
+        return s.value if isinstance(s, TaskStatus) else str(s)
+
+    old_s = _status_str(old_task_status)
+    new_s = _status_str(task.status)
+    if old_s != new_s:
+        try:
+            notify_task_status_change(db, task, old_s, new_s)
+            db.commit()
+        except Exception as e:
+            print(f"Error sending status change notification: {e}")
+
     return task
 
 

@@ -23,6 +23,9 @@ class NotificationResponse(NotificationBase):
     task_id: Optional[str] = Field(None, serialization_alias="taskId")
     read: bool
     created_at: datetime = Field(..., serialization_alias="createdAt")
+    severity: int = 1
+    event_code: Optional[str] = Field(None, serialization_alias="eventCode")
+    email_sent: bool = Field(False, serialization_alias="emailSent")
 
     model_config = {"from_attributes": True, "populate_by_name": True}
 

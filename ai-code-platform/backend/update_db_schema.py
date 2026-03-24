@@ -427,6 +427,20 @@ def update_schema():
             import traceback
             traceback.print_exc()
 
+        # --- Notifications table: severity, event_code, email_sent + enum critical ---
+        try:
+            print("\nEnsuring notifications columns (severity, event_code, email_sent)...")
+            for col_sql in [
+                "ALTER TABLE notifications ADD COLUMN IF NOT EXISTS severity INTEGER NOT NULL DEFAULT 1",
+                "ALTER TABLE notifications ADD COLUMN IF NOT EXISTS event_code VARCHAR(100)",
+                "ALTER TABLE notifications ADD COLUMN IF NOT EXISTS email_sent BOOLEAN NOT NULL DEFAULT FALSE",
+            ]:
+                conn.execute(text(col_sql))
+            conn.commit()
+            print("✓ notifications columns ensured")
+        except Exception as e:
+            print(f"Note: notifications migration: {e}")
+
 if __name__ == "__main__":
     update_schema()
 
