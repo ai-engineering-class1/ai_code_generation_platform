@@ -75,8 +75,12 @@ class Settings(BaseSettings):
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
     SMTP_TLS: bool = True
+    # When True, use implicit TLS (SMTP_SSL), typical for port 465; when False, use STARTTLS after connect (port 587)
+    SMTP_SSL: bool = False
     NOTIFICATION_EMAIL_FROM: str = ""
     APP_PUBLIC_URL: str = "http://localhost:3012"
+    # Connect + read timeout for SMTP (seconds); raise if flaky networks to Gmail etc.
+    SMTP_TIMEOUT_SECONDS: int = 90
     
     class Config:
         env_file = ".env"

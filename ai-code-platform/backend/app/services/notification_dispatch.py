@@ -11,7 +11,11 @@ from sqlalchemy.orm import Session
 from app.models.organization import UserRoleAssignment
 from app.models.rbac import Role
 from app.models.user import User
-from app.services.email_service import send_notification_email
+from app.services.email_service import (
+    send_on_connected_server,
+    smtp_is_configured,
+    smtp_session,
+)
 from app.services.notification_events import (
     get_event_config,
     include_managers_for_level,
@@ -111,11 +115,21 @@ def dispatch_notification(
             path = action_url if action_url.startswith("/") else f"/{action_url}"
             full_action = f"{base}{path}"
 
+    email_subject = f"[{settings.APP_NAME}] {title}" if settings.APP_NAME else title
+
+    pending_email: list[tuple] = []
+
     count = 0
     for uid in in_app:
         user = db.query(User).filter(User.id == uid).first()
         if not user:
             continue
+        if send_email and uid in email_targets and not user.email:
+            logger.warning(
+                "[DISPATCH] email skipped (no address on user) user_id=%s event=%s",
+                uid,
+                event_code,
+            )
         email_ok = uid in email_targets and user.email
         n = create_notification(
             db=db,
@@ -132,14 +146,43 @@ def dispatch_notification(
         )
         count += 1
         if email_ok:
-            sent = send_notification_email(
-                to_email=user.email,
-                subject=f"[{event_code}] {title}",
-                body_text=message or title,
-                action_url=full_action,
+            pending_email.append((n, user.email))
+
+    if pending_email and smtp_is_configured():
+        try:
+            with smtp_session() as server:
+                for n_row, to_addr in pending_email:
+                    try:
+                        send_on_connected_server(
+                            server,
+                            to_addr,
+                            email_subject,
+                            message or title,
+                            action_url=full_action,
+                            event_code=event_code,
+                        )
+                        n_row.email_sent = True
+                        logger.info("[EMAIL] Sent to %s: %s", to_addr, email_subject[:80])
+                    except Exception as send_err:
+                        logger.error(
+                            "[EMAIL] Failed to send to %s: %s",
+                            to_addr,
+                            send_err,
+                            exc_info=True,
+                        )
+        except Exception as sess_err:
+            logger.error(
+                "[EMAIL] SMTP session failed; skipped %s recipient(s): %s",
+                len(pending_email),
+                sess_err,
+                exc_info=True,
             )
-            if sent:
-                n.email_sent = True
+    elif pending_email:
+        logger.info(
+            "[EMAIL] SMTP not configured; skipping email for %s recipient(s) event=%s",
+            len(pending_email),
+            event_code,
+        )
 
     if commit:
         db.commit()

@@ -28,11 +28,22 @@ L2_EMAIL_EVENTS: FrozenSet[str] = frozenset(
     }
 )  # task.blocked: urgent / may block workflow offline
 
+# Level-1 events that also send email to core recipients (assignee/owner only; no Manager fan-out)
+# when SMTP is configured — useful for milestones users may miss when offline.
+L1_EMAIL_EVENTS: FrozenSet[str] = frozenset(
+    {
+        "task.assigned",
+        "task.completed",
+        "github.pr_merged",
+        "workflow.completed",
+    }
+)
+
 # Default for unknown event codes (in-app only, info)
 DEFAULT_EVENT_CONFIG = EventConfig(level=1, notify_ops_on_l2=False)
 
 EVENT_REGISTRY: Dict[str, EventConfig] = {
-    # --- Level 1: in-app only (success / routine info) ---
+    # --- Level 1: routine info; email only for codes in L1_EMAIL_EVENTS when SMTP is set ---
     "task.assigned": EventConfig(level=1),
     "task.completed": EventConfig(level=1),
     "pr.created": EventConfig(level=1),
@@ -87,7 +98,7 @@ def notification_type_for_level(level: int) -> NotificationType:
 
 
 def should_send_email(event_code: str, config: EventConfig) -> bool:
-    """Email only for important / urgent / failure / time-sensitive events."""
+    """Email for L3+, L4, selected L2, and allowlisted L1 (stakeholder milestones)."""
     if config.level >= 4:
         return True
     if config.level >= 3:
@@ -97,6 +108,9 @@ def should_send_email(event_code: str, config: EventConfig) -> bool:
             return True
         if config.notify_ops_on_l2:
             return True
+        return False
+    if config.level == 1:
+        return event_code in L1_EMAIL_EVENTS
     return False
 
 
