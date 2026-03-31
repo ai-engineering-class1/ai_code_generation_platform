@@ -21,7 +21,9 @@ engine = create_engine(
     sync_database_url,
     pool_size=settings.DATABASE_POOL_SIZE,
     max_overflow=settings.DATABASE_MAX_OVERFLOW,
-    echo=settings.DEBUG
+    pool_pre_ping=True,
+    pool_recycle=settings.DATABASE_POOL_RECYCLE_SECONDS,
+    echo=settings.DEBUG,
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

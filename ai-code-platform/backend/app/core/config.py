@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     DATABASE_POOL_SIZE: int = 5
     DATABASE_MAX_OVERFLOW: int = 10
+    # Recycle sync connections before proxies / Postgres idle timeouts drop them (avoids stale pool errors).
+    DATABASE_POOL_RECYCLE_SECONDS: int = 300
     
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
