@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Text, ForeignKey, DateTime, Boolean, Enum, JSON
+from sqlalchemy import Column, String, Text, ForeignKey, DateTime, Boolean, Enum, JSON, Integer
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import uuid
@@ -26,6 +26,10 @@ class Notification(Base):
     read = Column(Boolean, default=False)
     action_url = Column(String(500))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    # Severity 1=info/success, 2=warning, 3=error, 4=critical (routing + email policy)
+    severity = Column(Integer, nullable=False, server_default="1")
+    event_code = Column(String(100), nullable=True, index=True)
+    email_sent = Column(Boolean, nullable=False, server_default="false")
     
     # Relationships
     user = relationship("User", back_populates="notifications")

@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     DATABASE_POOL_SIZE: int = 5
     DATABASE_MAX_OVERFLOW: int = 10
+    # Recycle sync connections before proxies / Postgres idle timeouts drop them (avoids stale pool errors).
+    DATABASE_POOL_RECYCLE_SECONDS: int = 300
     
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -68,6 +70,19 @@ class Settings(BaseSettings):
     
     # Logging
     LOG_LEVEL: str = "INFO"
+
+    # Email (optional — when unset, failure/alert emails are logged only)
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_TLS: bool = True
+    # When True, use implicit TLS (SMTP_SSL), typical for port 465; when False, use STARTTLS after connect (port 587)
+    SMTP_SSL: bool = False
+    NOTIFICATION_EMAIL_FROM: str = ""
+    APP_PUBLIC_URL: str = "http://localhost:3012"
+    # Connect + read timeout for SMTP (seconds); raise if flaky networks to Gmail etc.
+    SMTP_TIMEOUT_SECONDS: int = 90
     
     class Config:
         env_file = ".env"
